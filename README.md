@@ -9,6 +9,7 @@
   <img src="https://img.shields.io/badge/SwiftData-1B5E3F" alt="SwiftData">
   <img src="https://img.shields.io/badge/Swift%20Charts-D4A017" alt="Swift Charts">
   <img src="https://img.shields.io/badge/ba%C4%9F%C4%B1ml%C4%B1l%C4%B1k-yok-2E7D32" alt="Üçüncü taraf bağımlılık yok">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/lisans-MIT-blue" alt="MIT lisansı"></a>
 </p>
 
 **Birikim Defteri**, altın, gümüş, döviz, fon ve TL birikimlerini; kimde, nerede ve ne maliyetle durduklarını takip eden kişisel bir iPhone uygulaması. Bütün veriler cihazda kalır: sunucu yok, hesap yok, analitik yok. İnternete yalnızca herkese açık güncel fiyatları almak için çıkılır.
@@ -191,3 +192,7 @@ Paralel test, her çalıştırmada simülatörün bir kopyasını oluşturup dis
 ```bash
 xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 ```
+
+## Lisans
+
+[MIT](LICENSE) © 2026 Kadir Tuna
