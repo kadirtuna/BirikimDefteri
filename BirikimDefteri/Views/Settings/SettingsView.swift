@@ -39,6 +39,14 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
                 }
 
+                Section {
+                    NavigationLink {
+                        GuideView()
+                    } label: {
+                        Label("Kullanım kılavuzu", systemImage: "book")
+                    }
+                }
+
                 Section("Tanımlar") {
                     NavigationLink {
                         PeopleView()

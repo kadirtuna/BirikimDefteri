@@ -72,6 +72,7 @@
 - **Undo and history:** every change to transactions, transfers, debts and payments is logged and can be undone, including a quick undo right after a delete.
 - **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher, and an eye button hides all amounts when someone is looking.
 - **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
+- **In-app guide:** Settings > Kullanım kılavuzu explains every feature, where to find it and how it works, with search.
 - **Native feel:** light and dark mode, Dynamic Type, hand-drawn product icons (bars, coins, bracelets, currency badges).
 
 ### Tech stack
@@ -244,6 +245,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 - **Geri al ve işlem geçmişi:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir; silme sonrasında hızlı geri al da var.
 - **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir; göz düğmesiyle yanınızda biri varken bütün tutarlar gizlenir.
 - **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
+- **Kullanım kılavuzu:** Ayarlar > Kullanım kılavuzu; her özelliğin ne işe yaradığı, nerede olduğu ve nasıl kullanıldığı, aramalı.
 - **Yerel his:** açık ve koyu mod, Dynamic Type; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
 
 ### Teknoloji
