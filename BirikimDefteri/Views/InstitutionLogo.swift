@@ -47,6 +47,14 @@ struct PlaceIcon: View {
     /// Tanınmayan yerlerde kullanılacak dolgu; verilmezse yer türünün rengi kullanılır.
     var color: Color?
 
+    /// Yerin vurgu rengi: tanınan kurumda marka rengi, değilse yer türünün rengi.
+    static func accent(for location: LocationInfo?) -> Color {
+        if let location, location.kind == .bank, let institution = Institution.match(location.name) {
+            return Color(hex: institution.color)
+        }
+        return location?.kind == .bank ? Color(hex: 0x1E88E5) : Color(hex: 0x2E7D32)
+    }
+
     var body: some View {
         if let location, location.kind == .bank, let institution = Institution.match(location.name) {
             InstitutionLogo(institution: institution, size: size)
