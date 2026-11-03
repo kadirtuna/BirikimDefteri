@@ -134,24 +134,29 @@ struct CategoryTrendChart: View {
     private struct Entry: Identifiable {
         let date: Date
         let category: AssetCategory
-        let value: Double
+        let share: Double
         var id: String { "\(date.timeIntervalSince1970)-\(category.rawValue)" }
     }
 
     var body: some View {
         let categories = AssetCategory.allCases.filter { category in points.contains { ($0.byCategory[category] ?? 0) > 0 } }
-        let entries = points.flatMap { point in
-            categories.map { Entry(date: point.date, category: $0, value: (point.byCategory[$0] ?? 0).doubleValue) }
+        // Paylar burada hesaplanır: grafiğin kendi normalleştirmesi ekseni ham TL değerlerine göre kurduğu
+        // için 0–1 aralığındaki etiketler en alta yığılıyordu.
+        let entries = points.flatMap { point -> [Entry] in
+            let total = point.byCategory.values.sum { $0 }
+            guard total > 0 else { return [] }
+            return categories.map { Entry(date: point.date, category: $0, share: ((point.byCategory[$0] ?? 0) / total).doubleValue) }
         }
 
         Chart(entries) { entry in
             AreaMark(
                 x: .value("Tarih", entry.date),
-                y: .value("Pay", entry.value),
-                stacking: .normalized
+                y: .value("Pay", entry.share),
+                stacking: .standard
             )
             .foregroundStyle(by: .value("Tür", entry.category.title))
         }
+        .chartYScale(domain: 0...1)
         .chartForegroundStyleScale(
             domain: categories.map(\.title),
             range: categories.map { ChartPalette.palette(for: $0)[0] }
