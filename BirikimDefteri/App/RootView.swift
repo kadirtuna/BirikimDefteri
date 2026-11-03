@@ -56,6 +56,7 @@ struct RootView: View {
             DebtsView()
                 .tabItem { Label("Borçlar", systemImage: "creditcard") }
                 .tag(AppTab.debts)
+                .badge(ledger.upcomingPayments(within: 3).count)
             PricesView()
                 .tabItem { Label("Fiyatlar", systemImage: "tag") }
                 .tag(AppTab.prices)
@@ -70,6 +71,10 @@ struct RootView: View {
         .environment(router)
         .environment(lock)
         .environment(priceUpdater)
+        // Siri'nin "… ile Gram altın ekle" cümlelerindeki ürün adları güncel kalsın.
+        .onChange(of: assets.map(\.name), initial: true) {
+            BirikimShortcuts.updateAppShortcutParameters()
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             lock.scenePhaseChanged(to: phase)
             if phase == .active || phase == .background {

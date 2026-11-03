@@ -716,3 +716,91 @@ enum DebtPlan {
         return (months, end)
     }
 }
+
+// MARK: - Günlük değişim
+
+struct DailyChange: Hashable, Sendable {
+    let change: Decimal
+    let ratio: Decimal?
+}
+
+extension PortfolioCalculator {
+    /// Bugünkü fiyat değişimi: eldeki miktarların bugünkü son fiyatla dünkü son fiyat arasındaki farkı.
+    /// Bugün fiyatı güncellenen ürün yoksa nil. Alım ve satışlar değişime katılmaz; TL tutarları yalnızca oranın paydasındadır.
+    func dailyChange(for filter: PersonFilter = .everyone, now: Date = .now, calendar: Calendar = .current) -> DailyChange? {
+        let startOfDay = calendar.startOfDay(for: now)
+        var change: Decimal = 0
+        var base: Decimal = 0
+        var isUpdatedToday = false
+        for holding in holdings(for: filter) {
+            guard let asset = assets[holding.key.assetID] else { continue }
+            if asset.unit == .lira {
+                base += holding.quantity
+                continue
+            }
+            guard let history = priceHistory[asset.id], let latest = history.last,
+                  let previous = Self.last(in: history, atOrBefore: startOfDay.addingTimeInterval(-1))
+            else { continue }
+            if latest.date >= startOfDay { isUpdatedToday = true }
+            change += holding.quantity * (latest.price - previous.price)
+            base += holding.quantity * previous.price
+        }
+        guard isUpdatedToday else { return nil }
+        return DailyChange(change: change, ratio: base > 0 ? change / base : nil)
+    }
+
+    /// Eldeki ürünlerin en son fiyat kaydının zamanı.
+    func latestPriceDate(for filter: PersonFilter = .everyone) -> Date? {
+        holdings(for: filter).compactMap { latestPrices[$0.key.assetID]?.date }.max()
+    }
+}
+
+// MARK: - Yaklaşan ödemeler
+
+struct UpcomingPayment: Hashable, Sendable {
+    let date: Date
+    /// Kredi kartında kalan borç, taksitli borçta aylık taksit.
+    let amount: Decimal?
+}
+
+extension DebtPlan {
+    /// Borcun sıradaki ödemesi. Kredi kartında son ödeme tarihi (geçtiyse bir aya kadar gecikmiş olarak);
+    /// taksitli borçta ayın taksit günü. Son ödeme taksit gününden en çok 15 gün önce yapıldıysa o ayınki ödenmiş sayılır.
+    static func nextPayment(
+        kind: DebtKind, remaining: Decimal, monthly: Decimal?, dueDate: Date?, paymentDay: Int?,
+        lastPayment: Date?, now: Date = .now, calendar: Calendar = .current
+    ) -> UpcomingPayment? {
+        guard remaining > 0 else { return nil }
+        let today = calendar.startOfDay(for: now)
+
+        if kind == .creditCard {
+            guard let dueDate else { return nil }
+            let due = calendar.startOfDay(for: dueDate)
+            guard let oldest = calendar.date(byAdding: .month, value: -1, to: today), due >= oldest else { return nil }
+            return UpcomingPayment(date: due, amount: remaining)
+        }
+
+        guard let paymentDay else { return nil }
+        if let dueDate, calendar.startOfDay(for: dueDate) < today { return nil }
+
+        func occurrence(monthsFromNow offset: Int) -> Date? {
+            guard let month = calendar.date(byAdding: .month, value: offset, to: today),
+                  let interval = calendar.dateInterval(of: .month, for: month),
+                  let days = calendar.range(of: .day, in: .month, for: month)
+            else { return nil }
+            return calendar.date(byAdding: .day, value: min(paymentDay, days.count) - 1, to: interval.start)
+        }
+
+        var offset = 0
+        guard var candidate = occurrence(monthsFromNow: 0) else { return nil }
+        if candidate < today, let next = occurrence(monthsFromNow: 1) {
+            candidate = next
+            offset = 1
+        }
+        if let lastPayment, let windowStart = calendar.date(byAdding: .day, value: -15, to: candidate),
+           lastPayment >= windowStart, let next = occurrence(monthsFromNow: offset + 1) {
+            candidate = next
+        }
+        return UpcomingPayment(date: candidate, amount: monthly)
+    }
+}

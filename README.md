@@ -53,7 +53,7 @@
 
 ### Highlights
 
-- **Net worth at a glance:** assets, debts and profit/loss on one card. Filter by person (everyone or one person) and see a donut chart grouped by product, category, person or location.
+- **Net worth at a glance:** assets, debts and profit/loss on one card, with today's change and when prices were last updated; pull down to refresh prices. Filter by person (everyone or one person) and see a donut chart grouped by product, category, person or location; tap a slice to see its value and share. Payments due within a week are listed on the summary, and the Debts tab shows a badge.
 - **Average-cost accounting:** balances are never stored; they are always derived from transactions (person × product × location). A sale removes cost at the average cost. The app rejects selling more than you hold, and edits or deletions that would leave a later sale uncovered.
 - **Analytics:**
   - value vs. cost history; tap the chart to see any date
@@ -67,14 +67,16 @@
 - **Where are my assets?:** contents, totals and share per bank, brokerage or physical location.
 - **Transfers:** move holdings between locations (e.g. from a safe to a bank account) without a fake sale; the cost basis moves with them.
 - **Goals:** net worth or product quantity targets (e.g. 100 g of gold) with progress and an estimated date based on the last 3 months.
-- **Live prices:** Grand Bazaar (Kapalıçarşı) bid prices for gold coins, bracelets and silver; central bank (TCMB) rates for USD and EUR, each with its 1-month change. Prices can always be entered by hand.
-- **Debts:** loans, credit cards and others; grouped by institution with per-type subtotals and total monthly installments. Each debt keeps a payment history and an estimated payoff date, and local notifications remind you of card due dates and installment days.
-- **Undo and history:** every change to transactions, transfers, debts and payments is logged and can be undone, including a quick undo right after a delete.
+- **Live prices:** Grand Bazaar (Kapalıçarşı) bid prices for gold coins, bracelets and silver; central bank (TCMB) rates for USD and EUR, each with a 30-day sparkline and change badge. Prices can always be entered by hand.
+- **Debts:** loans, credit cards and others; grouped by institution with per-type subtotals and total monthly installments. Each debt keeps a payment history, a progress ring and an estimated payoff date, and local notifications remind you of card due dates and installment days.
+- **Fast entry:** amounts are grouped as you type (1.234,50), new records start with the last person and location, and any record can be repeated with today's date from a swipe or a long-press menu (edit, repeat, transfer, delete). Records are searchable and each month shows its total buys and sells.
+- **Nothing is lost:** every change to transactions, transfers, debts and payments is logged and can be undone. Deletions (including goals, people, locations and products with their price history) and backup restores are kept forever under Deleted and can be brought back at any time; a restore can itself be undone.
+- **Siri and Shortcuts:** "Birikim Defteri ile alım ekle" adds a buy or sell without opening the app, using the last person and location and the current price. Works from the Shortcuts app and the Action button.
 - **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher, and an eye button hides all amounts when someone is looking.
 - **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
 - **Bank logos:** 54 Turkish banks and brokerages are recognized from location and debt names and shown with their logo. Logos are trademarks, so they are not in this repository: `scripts/fetch-logos.py` downloads them for your own build, from each institution's website or, when the site only has a tiny favicon, from its official App Store app. Without them, each institution shows a monogram in its brand color.
 - **In-app guide:** Settings > Kullanım kılavuzu explains every feature, where to find it and how it works, with search.
-- **Native feel:** light and dark mode, Dynamic Type, hand-drawn product icons (bars, coins, bracelets, currency badges).
+- **Native feel:** light and dark mode, dark and tinted app icons, Dynamic Type, haptic feedback, hand-drawn product icons (bars, coins, bracelets, currency badges).
 
 ### Tech stack
 
@@ -85,9 +87,9 @@
 | Charts | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Domain logic | Pure Swift `PortfolioCalculator`, independent of SwiftUI and unit tested |
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
-| System | UserNotifications (local reminders), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
+| System | UserNotifications (local reminders), App Intents (Siri, Shortcuts), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 45 tests in 15 suites |
+| Tests | Swift Testing: 52 tests in 18 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -135,7 +137,7 @@ BirikimDefteri/
 ├── Views/           Summary, Transactions, Debts, Prices, Settings, Analytics; icons and theme
 └── Assets.xcassets  App icon, logo, colors
 BirikimDefteriTests/ Swift Testing unit tests
-scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups), fetch-logos.py (local bank logos)
+scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups), fetch-logos.py (local bank logos), app-icon.swift (app icon)
 docs/                README images
 ```
 
@@ -228,7 +230,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 
 ### Öne çıkanlar
 
-- **Net varlık özeti:** varlıklar, borçlar ve kâr/zarar tek kartta. Kişi filtresi (Herkes / tek kişi) ve ürüne, türe, kişiye ya da yere göre halka grafik.
+- **Net varlık özeti:** varlıklar, borçlar ve kâr/zarar tek kartta; bugünkü değişim ve fiyatların son güncellenme saatiyle. Aşağı çekince fiyatlar yenilenir. Kişi filtresi (Herkes / tek kişi) ve ürüne, türe, kişiye ya da yere göre halka grafik; dilime dokununca tutarı ve payı görünür. 7 gün içindeki ödemeler Özet'te listelenir, Borçlar sekmesinde rozet çıkar.
 - **Ortalama maliyet yöntemi:** bakiyeler hiçbir yerde saklanmaz; her zaman işlemlerden hesaplanır (kişi × ürün × yer). Satış, ortalama maliyetten düşer. Eldekinden fazla satış ve sonraki bir satışı karşılıksız bırakan düzenleme ya da silme engellenir.
 - **Analiz:**
   - değer ve maliyet geçmişi; grafiğe dokunup herhangi bir günü görebilirsiniz
@@ -242,14 +244,16 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 - **Varlıklarım nerede?:** banka, aracı kurum ve fiziki yer başına içerik, toplam ve pay.
 - **Aktarım:** varlığı bir yerden ötekine (ör. kasadan banka hesabına) sahte alım-satım yapmadan taşıma; maliyet de birlikte taşınır.
 - **Hedefler:** net varlık ya da ürün miktarı hedefi (ör. 100 gr altın); ilerleme ve son 3 aydaki hıza göre tahmini tarih.
-- **Güncel fiyatlar:** altın çeşitleri, bilezik ve gümüş için Kapalıçarşı alış fiyatı, dolar ve euro için TCMB kuru; her birinin 1 aylık değişimiyle. Fiyatlar her zaman elle de girilebilir.
-- **Borçlar:** kredi, kredi kartı ve diğer; kuruma göre gruplama, türe göre ara toplamlar, aylık taksit toplamı. Her borcun ödeme geçmişi ve tahmini bitiş tarihi tutulur; kart son ödeme ve taksit günleri yerel bildirimle hatırlatılır.
-- **Geri al ve işlem geçmişi:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir; silme sonrasında hızlı geri al da var.
+- **Güncel fiyatlar:** altın çeşitleri, bilezik ve gümüş için Kapalıçarşı alış fiyatı, dolar ve euro için TCMB kuru; her birinde 30 günlük mini grafik ve değişim rozeti. Fiyatlar her zaman elle de girilebilir.
+- **Borçlar:** kredi, kredi kartı ve diğer; kuruma göre gruplama, türe göre ara toplamlar, aylık taksit toplamı. Her borcun ödeme geçmişi, ödenen kısmı gösteren halkası ve tahmini bitiş tarihi tutulur; kart son ödeme ve taksit günleri yerel bildirimle hatırlatılır.
+- **Hızlı kayıt:** tutarlar yazılırken binlik ayraçla gösterilir (1.234,50), yeni kayıtta son kişi ve yer hazır gelir, bir kayıt kaydırarak ya da uzun basma menüsünden (Düzenle, Tekrarla, Aktar, Sil) bugünün tarihiyle tekrarlanır. Kayıtlarda arama var; ay başlıklarında o ayın toplam alım ve satımı yazar.
+- **Hiçbir şey kaybolmaz:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir. Silmeler (hedef, kişi, yer ve fiyat geçmişiyle ürünler dahil) ve yedekten geri yüklemeler Silinenler'de hep kalır, istendiğinde geri getirilir; geri yükleme de geri alınabilir.
+- **Siri ve Kısayollar:** "Birikim Defteri ile alım ekle" ile uygulamayı açmadan alım ya da satım eklenir; son kişi ve yer, güncel fiyat kullanılır. Kısayollar uygulamasında ve Eylem düğmesinde de çalışır.
 - **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir; göz düğmesiyle yanınızda biri varken bütün tutarlar gizlenir.
 - **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
 - **Banka logoları:** Türkiye'deki 54 banka ve aracı kurum, saklama yeri ve borç adlarından tanınıp logosuyla gösterilir. Logolar tescilli marka olduğu için bu depoda yer almaz; `scripts/fetch-logos.py` onları kendi derlemeniz için kurumun sitesinden, sitede yalnızca küçük bir favicon varsa resmi App Store uygulamasından indirir. Logo yoksa kurum, marka renginde baş harf rozetiyle görünür.
 - **Kullanım kılavuzu:** Ayarlar > Kullanım kılavuzu; her özelliğin ne işe yaradığı, nerede olduğu ve nasıl kullanıldığı, aramalı.
-- **Yerel his:** açık ve koyu mod, Dynamic Type; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
+- **Yerel his:** açık ve koyu mod, koyu ve renklendirilmiş uygulama simgesi, Dynamic Type, dokunsal geri bildirim; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
 
 ### Teknoloji
 
@@ -260,9 +264,9 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 | Grafikler | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Hesaplama | Saf Swift `PortfolioCalculator`; SwiftUI'dan bağımsız, birim testli |
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
-| Sistem | UserNotifications (yerel hatırlatmalar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
+| Sistem | UserNotifications (yerel hatırlatmalar), App Intents (Siri, Kısayollar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 45 test, 15 grup |
+| Test | Swift Testing: 52 test, 18 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -310,7 +314,7 @@ BirikimDefteri/
 ├── Views/           Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz; simgeler ve tema
 └── Assets.xcassets  Uygulama simgesi, logo, renkler
 BirikimDefteriTests/ Swift Testing birim testleri
-scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek), fetch-logos.py (yerel banka logoları)
+scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek), fetch-logos.py (yerel banka logoları), app-icon.swift (uygulama simgesi)
 docs/                README görselleri
 ```
 

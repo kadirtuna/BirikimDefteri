@@ -102,8 +102,11 @@ struct GoalsView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button("Sil", systemImage: "trash", role: .destructive) {
+                            Journal.recordDeletion(.goal, summary: Journal.describe(goal),
+                                                   snapshot: .init(goals: [Journal.entry(goal)]), in: context)
                             context.delete(goal)
                             try? context.save()
+                            Haptics.warning()
                         }
                     }
                 }
@@ -234,6 +237,7 @@ struct GoalFormView: View {
             context.insert(Goal(title: name, kind: kind, target: target, assetID: asset, personID: personID))
         }
         try? context.save()
+        Haptics.success()
         dismiss()
     }
 }

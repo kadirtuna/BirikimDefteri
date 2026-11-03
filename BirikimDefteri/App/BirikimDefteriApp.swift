@@ -1,19 +1,27 @@
 import SwiftData
 import SwiftUI
 
-@main
-struct BirikimDefteriApp: App {
-    private let container: ModelContainer
-
-    init() {
+/// Uygulama ve Kısayollar (Siri) aynı veri deposunu kullanır.
+@MainActor
+enum AppContainer {
+    static let shared: ModelContainer = {
         do {
-            container = try ModelContainer(
+            return try ModelContainer(
                 for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self,
                 DebtPayment.self, Goal.self, JournalEntry.self
             )
         } catch {
             fatalError("Veri deposu açılamadı: \(error)")
         }
+    }()
+}
+
+@main
+struct BirikimDefteriApp: App {
+    private let container: ModelContainer
+
+    init() {
+        container = AppContainer.shared
         #if DEBUG
         Store.loadDemoDataIfRequested(in: container.mainContext)
         #endif

@@ -135,7 +135,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Yedekleme")
                 } footer: {
-                    Text("Yedek bir JSON dosyasıdır. Geri yükleme mevcut tüm verilerin yerine geçer.")
+                    Text("Yedek bir JSON dosyasıdır. Geri yükleme mevcut verilerin yerine geçer; önceki hâle İşlem geçmişi'nden dönebilirsiniz.")
                 }
 
                 Section {
@@ -193,7 +193,7 @@ struct SettingsView: View {
                 Button("Vazgeç", role: .cancel) {}
                 Button("Geri yükle", role: .destructive) { restore(backup) }
             } message: { backup in
-                Text("\(Format.dateTime(backup.exportedAt)) tarihli yedek: \(backup.transactions.count) işlem, \(backup.debts.count) borç. Mevcut tüm veriler silinecek ve yedektekilerle değiştirilecek. Bu işlem geri alınamaz.")
+                Text("\(Format.dateTime(backup.exportedAt)) tarihli yedek: \(backup.transactions.count) işlem, \(backup.debts.count) borç. Mevcut veriler yedektekilerle değiştirilecek. Vazgeçerseniz Ayarlar > İşlem geçmişi'nden eski hâline dönebilirsiniz.")
             }
             .alert(notice?.title ?? "", isPresented: Binding(isPresent: $notice), presenting: notice) { _ in
                 Button("Tamam", role: .cancel) {}
@@ -240,6 +240,10 @@ struct SettingsView: View {
 
     private func restore(_ backup: BackupFile) {
         do {
+            Journal.recordRestore(
+                replacing: BackupService.makeBackup(from: ledger),
+                summary: "Yedekten geri yükleme · \(Format.dateTime(backup.exportedAt)) tarihli yedek", in: context
+            )
             try BackupService.restore(backup, into: context)
             notice = Notice(title: "Geri yükleme tamamlandı", message: "\(backup.transactions.count) işlem ve \(backup.debts.count) borç yüklendi.")
         } catch {

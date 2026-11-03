@@ -168,10 +168,13 @@ enum GuideContent {
                 summary: "Yeni alım ya da satım girme, düzenleme, silme ve filtreleme.",
                 location: "Özet ya da Kayıtlar > sağ üstteki + > Alış / Satış",
                 items: [
-                    .init(title: "Kayıt ekleme", text: "İşlem türünü, ürünü, kişiyi, yeri, miktarı ve birim fiyatı girin. Birim fiyatı boş bırakırsanız güncel fiyat kullanılır. TL'de yalnızca tutar girilir."),
+                    .init(title: "Kayıt ekleme", text: "İşlem türünü, ürünü, kişiyi, yeri, miktarı ve birim fiyatı girin. Birim fiyatı boş bırakırsanız güncel fiyat kullanılır. TL'de yalnızca tutar girilir. Kişi ve yer, son kaydınızdakiyle gelir. Tutarlar yazılırken 1.234,50 biçiminde gösterilir; ondalık için virgül ya da nokta kullanabilirsiniz."),
+                    .init(title: "Tekrarla", text: "Bir kaydı sağa kaydırıp Tekrarla'ya ya da uzun basıp menüden Tekrarla'ya dokunun. Aynı ürün, kişi, yer ve miktar bugünün tarihiyle yeni kayıt olarak açılır; fiyat güncel fiyattan önerilir."),
+                    .init(title: "Uzun basma menüsü", text: "Bir kayda uzun basınca Düzenle, Tekrarla, Başka yere aktar ve Sil seçenekleri çıkar."),
                     .init(title: "Elde olmayan satılamaz", text: "Bir kişinin bir yerde sahip olduğundan fazlası satılamaz. Daha sonraki bir satışı karşılıksız bırakacak bir düzenleme ya da silme de engellenir; uygulama nedenini yazar."),
-                    .init(title: "Düzenleme ve silme", text: "Kayıtlar'da bir satıra dokunarak düzenleyin, sola kaydırarak silin. Silmeden sonra ekranın altında birkaç saniye Geri al düğmesi görünür."),
-                    .init(title: "Filtre", text: "Kayıtlar'ın sol üstündeki filtre düğmesiyle ürüne, yere ve kişiye göre süzebilirsiniz."),
+                    .init(title: "Düzenleme ve silme", text: "Kayıtlar'da bir satıra dokunarak düzenleyin, sola kaydırarak silin. Silmeden sonra ekranın altında birkaç saniye Geri al düğmesi görünür; kaçırırsanız Silinenler'den her zaman geri getirebilirsiniz."),
+                    .init(title: "Arama ve filtre", text: "Üstteki arama çubuğu ürün, yer, kişi, işlem türü ve notlarda arar. Sol üstteki filtre düğmesiyle ürüne, yere ve kişiye göre süzebilir, Silinenler'e de buradan gidebilirsiniz."),
+                    .init(title: "Ay özetleri", text: "Her ayın başlığında o ayın toplam alım ve satımı yazar; aktarımlar bu toplamlara katılmaz."),
                 ]
             ),
             GuideTopic(
@@ -197,7 +200,9 @@ enum GuideContent {
                 location: "Özet",
                 items: [
                     .init(title: "Net varlık kartı", text: "Varlıklar, borçlar, net varlık ve kâr/zarar tek kartta. En üstteki kişi seçiciyle herkesi ya da tek bir kişiyi görebilirsiniz; açılışta Ben seçilidir."),
-                    .init(title: "Dağılım", text: "Halka grafik varlıkları Ürün, Tür, Kişi ya da Yer'e göre gruplar. Listedeki bir satıra dokununca o grubun değer geçmişini, fiyat geçmişini, nerede ve kimde durduğunu, alım ve satımlarını görürsünüz."),
+                    .init(title: "Bugünkü değişim", text: "Kartta, eldeki ürünlerin bugünkü fiyatının dünkü son fiyata göre ne kadar değiştiği ve fiyatların en son ne zaman güncellendiği yazar. Bugün fiyat güncellenmediyse yalnızca güncelleme saati görünür. Ekranı aşağı çekerek fiyatları yenileyebilirsiniz."),
+                    .init(title: "Yaklaşan ödemeler", text: "Önümüzdeki 7 günde ödemesi olan ya da son ödeme tarihi geçmiş borçlar Özet'te listelenir. Borçlar sekmesindeki kırmızı rozet, 3 gün içindeki ödemelerin sayısıdır. Kredide bu ayın taksiti için ödeme eklediyseniz sonraki ay gösterilir."),
+                    .init(title: "Dağılım", text: "Halka grafik varlıkları Ürün, Tür, Kişi ya da Yer'e göre gruplar. Bir dilime dokununca ortada o grubun adı, tutarı ve payı görünür; yeniden dokununca toplama döner. Listedeki bir satıra dokununca o grubun değer geçmişini, fiyat geçmişini, nerede ve kimde durduğunu, alım ve satımlarını görürsünüz."),
                     .init(title: "Varlıklarım nerede?", text: "Bu kart her banka, aracı kurum ve fiziki yerdeki ürünleri, toplamı ve toplam içindeki payı gösterir."),
                     .init(title: "Fiyatı girilmemiş ürünler", text: "Fiyatı olmayan ürünler toplamlara katılmaz ve ayrı bir bölümde listelenir. Dokunup fiyat girebilirsiniz."),
                 ]
@@ -254,7 +259,7 @@ enum GuideContent {
                     .init(title: "İnternetten güncelleme", text: "Altın ve gümüş Truncgil Finans'tan (Kapalıçarşı alış fiyatı), dolar ve euro TCMB döviz alış kurundan alınır. Güncelle düğmesi ya da listeyi aşağı çekmek fiyatları yeniler. Ayarlar'da otomatik güncelleme açıksa uygulama, son güncellemenin üzerinden bir saat geçtiyse açılışta kendiliğinden yeniler."),
                     .init(title: "Elle fiyat", text: "Yeni değeri yazıp sağ üstteki Kaydet'e dokunun; yalnızca değiştirdiğiniz fiyatlar kaydedilir. Fon gibi otomatik olmayan ürünlerin fiyatını siz girersiniz. Otomatik ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir."),
                     .init(title: "Neden alış fiyatı", text: "Değerleme alış fiyatıyla yapılır; bugün satsanız elinize geçecek tutarı gösterir."),
-                    .init(title: "Piyasa değişimi", text: "Her ürünün altında son 1 aydaki fiyat değişimi yazar. Ürün ayrıntısındaki Fiyat geçmişi bölümü, kaydedilen fiyatlara göre piyasanın değişimini gösterir; bu, sizin alış maliyetinize göre getiriden ayrıdır."),
+                    .init(title: "Piyasa değişimi", text: "Her ürünün altında son 30 günün küçük fiyat grafiği ve değişim rozeti (yükselişte yeşil, düşüşte kırmızı) görünür. Ürün ayrıntısındaki Fiyat geçmişi bölümü, kaydedilen fiyatlara göre piyasanın değişimini gösterir; bu, sizin alış maliyetinize göre getiriden ayrıdır."),
                 ]
             ),
             GuideTopic(
@@ -266,8 +271,22 @@ enum GuideContent {
                 items: [
                     .init(title: "Borç ekleme", text: "Sağ üstteki + ile kredi, kredi kartı ya da başka bir borç ekleyin: kurum, kalan tutar, aylık taksit, son ödeme ya da bitiş tarihi, taksit günü ve kişi."),
                     .init(title: "Genel bakış", text: "En üstte toplam borç, türlere göre ara toplamlar ve aylık taksit toplamı yer alır; borçlar kuruma göre gruplanır. Borçlar Özet'teki net varlıktan düşülür."),
-                    .init(title: "Ödeme ve plan", text: "Bir borca dokunup Ödeme ekle ile yaptığınız ödemeyi girin. Tutar kalan borçtan düşülür; kredi kartında son ödeme tarihi bir ay ileri alınır. Detay ekranında ödeme geçmişi, toplam ödenen ve krediler için tahmini bitiş (kalan taksit sayısı) görünür. Tahmin faizi hesaba katmaz."),
+                    .init(title: "Ödeme ve plan", text: "Bir borca dokunup Ödeme ekle ile yaptığınız ödemeyi girin. Tutar kalan borçtan düşülür; kredi kartında son ödeme tarihi bir ay ileri alınır. Detay ekranında ödeme geçmişi, toplam ödenen ve krediler için tahmini bitiş (kalan taksit sayısı) görünür; ödeme girdiğiniz kredilerde halka, borcun ne kadarını ödediğinizi gösterir. Tahmin faizi hesaba katmaz."),
                     .init(title: "Hatırlatmalar", text: "Ayarlar > Bildirimler > Ödeme hatırlatmaları açıkken kredi kartında son ödemeden 2 gün önce ve o gün, kredide her ay taksit gününde saat 09:00'da bildirim gelir. Taksit günü borcun Düzenle ekranından seçilir. Tutarları gizle açıksa bildirimde tutar yazmaz."),
+                ]
+            ),
+        ]),
+        GuideSection(title: "iPhone ile", topics: [
+            GuideTopic(
+                title: "Siri ve Kısayollar",
+                symbol: "waveform",
+                tint: .indigo,
+                summary: "Uygulamayı açmadan sesle ya da tek dokunuşla alım veya satım ekleme.",
+                location: "Siri, Kısayollar uygulaması, Eylem düğmesi",
+                items: [
+                    .init(title: "Siri ile", text: "\"Birikim Defteri ile alım ekle\" ya da \"Birikim Defteri ile Gram altın ekle\" deyin. Siri miktarı sorar; ürünü söylemediyseniz onu da sorar. Kayıt son kullandığınız kişi ve yerle, güncel fiyattan eklenir."),
+                    .init(title: "Kısayollar uygulamasında", text: "Alım ya da satım ekle eylemiyle ürün, miktar, işlem türü, birim fiyat, yer ve kişiyi önceden belirleyen bir kısayol kurabilirsiniz; örneğin her ay aynı miktarda altın alıyorsanız tek dokunuşla eklenir. Kısayolu ana ekrana ya da Eylem düğmesine atayabilirsiniz."),
+                    .init(title: "Güvenlik", text: "Eylem yalnızca iPhone'un kilidi açıkken çalışır. Elde olandan fazla satış uygulamadaki gibi engellenir. Eklenen kayıt İşlem geçmişi'ne yazılır, notunda \"Kısayollar ile eklendi\" yazar ve geri alınabilir."),
                 ]
             ),
         ]),
@@ -291,8 +310,10 @@ enum GuideContent {
                 summary: "Yapılan her değişikliğin kaydı ve geri alınması.",
                 location: "Ayarlar > İşlem geçmişi",
                 items: [
-                    .init(title: "Ne kaydedilir", text: "İşlem, aktarım, borç ve borç ödemelerindeki her ekleme, düzenleme ve silme. Son 500 değişiklik saklanır ve günlere göre listelenir."),
+                    .init(title: "Ne kaydedilir", text: "İşlem, aktarım, borç ve borç ödemelerindeki her ekleme, düzenleme ve silme; hedef, kişi, saklama yeri ve ürün silmeleri; yedekten geri yüklemeler. Günlere göre listelenir."),
+                    .init(title: "Silinenler hiç kaybolmaz", text: "Ekleme ve düzenlemelerin son 500'ü tutulur, ama silmeler ve yedekten geri yüklemeler hiç budanmaz. Üstteki Silinenler sekmesinde hepsini görür, Geri getir ile istediğiniz zaman geri alırsınız. Silinen bir ürün fiyat kayıtlarıyla birlikte geri gelir."),
                     .init(title: "Geri alma", text: "Bir değişikliğin yanındaki Geri al'a dokunun; kayıt değişiklikten önceki hâline döner. Geri alma sonraki bir satışı karşılıksız bırakacaksa engellenir ve nedeni yazılır. Kayıtlar'da silmeden sonra çıkan Geri al da aynı işi görür."),
+                    .init(title: "Yanlışlıkla geri yükleme", text: "Yedekten geri yüklemeden hemen önce bütün verileriniz geçmişe kaydedilir. Geri al ile geri yüklemeden önceki hâle dönersiniz; o anki hâl de kaydedildiği için bu dönüş de geri alınabilir."),
                 ]
             ),
             GuideTopic(
@@ -303,7 +324,7 @@ enum GuideContent {
                 location: "Ayarlar > Excel'e aktar ve Yedekleme",
                 items: [
                     .init(title: "Otomatik yedek", text: "Veriler her değiştiğinde uygulama kendi klasörüne tarihli bir yedek yazar ve son 30'unu tutar. Mac'teki zamanlanmış görev bunları iCloud Drive > Birikim Defteri Yedekleri klasörüne kopyalar."),
-                    .init(title: "Elle yedek", text: "Yedeği dışa aktar ile bir JSON dosyası kaydedin. Yedekten geri yükle mevcut bütün verilerin yerine geçer ve geri alınamaz; önce mevcut veriyi yedeklemeniz önerilir."),
+                    .init(title: "Elle yedek", text: "Yedeği dışa aktar ile bir JSON dosyası kaydedin. Yedekten geri yükle mevcut bütün verilerin yerine geçer; önceki hâle İşlem geçmişi'nden dönebilirsiniz."),
                     .init(title: "Excel'e aktar", text: "İşlemler, varlıklar ve borçlar ayrı CSV dosyaları olarak kaydedilir ve Excel'de doğrudan açılır: noktalı virgülle ayrılmış, ondalıklar virgüllü."),
                     .init(title: "İmza yenileme", text: "Ücretsiz Apple hesabıyla uygulamanın imzası 7 gün geçerlidir. Mac'teki görev, iPhone aynı ağdayken imzayı süresi dolmadan yeniler; verileriniz silinmez."),
                 ]

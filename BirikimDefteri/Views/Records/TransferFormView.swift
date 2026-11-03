@@ -29,8 +29,12 @@ struct TransferFormView: View {
     @State private var isConfirmingDelete = false
     @State private var deleteError: String?
 
-    init(transferID: UUID? = nil) {
+    private let prefill: (assetID: UUID?, personID: UUID?, fromID: UUID?)
+
+    /// Yeni aktarım için ürün, kişi ve çıkış yeri önceden seçilebilir (ör. bir kaydın "Aktar" menüsünden).
+    init(transferID: UUID? = nil, assetID: UUID? = nil, personID: UUID? = nil, fromID: UUID? = nil) {
         self.transferID = transferID
+        self.prefill = (assetID, personID, fromID)
     }
 
     var body: some View {
@@ -161,8 +165,9 @@ struct TransferFormView: View {
         guard !isLoaded else { return }
         isLoaded = true
         guard let transferID else {
-            personID = ledger.people.first?.id
-            fromID = ledger.locations.first?.id
+            assetID = prefill.assetID
+            personID = prefill.personID ?? RecentChoices.person(among: ledger.people.map(\.id)) ?? ledger.people.first?.id
+            fromID = prefill.fromID ?? RecentChoices.location(among: ledger.locations.map(\.id)) ?? ledger.locations.first?.id
             return
         }
         let legs = ledger.transferLegs(transferID)
@@ -197,6 +202,7 @@ struct TransferFormView: View {
         }
         Journal.recordTransactions(existing.isEmpty ? .added : .edited, summary: summary, before: before, after: saved, in: context)
         try? context.save()
+        Haptics.success()
         dismiss()
     }
 
@@ -218,6 +224,7 @@ struct TransferFormView: View {
         }
         records.forEach(context.delete)
         try? context.save()
+        Haptics.warning()
         dismiss()
     }
 }

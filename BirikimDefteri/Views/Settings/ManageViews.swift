@@ -65,6 +65,7 @@ struct PeopleView: View {
             blockedMessage = "\(person.name) için kayıtlı işlem veya borç var. Önce onları silin ya da başka kişiye aktarın."
             return
         }
+        Journal.recordDeletion(.person, summary: Journal.describe(person), snapshot: .init(people: [Journal.entry(person)]), in: context)
         context.delete(person)
         try? context.save()
     }
@@ -125,6 +126,8 @@ struct LocationsView: View {
             blockedMessage = "\(location.name) için kayıtlı işlem var. Önce o işlemleri silin ya da başka yere taşıyın."
             return
         }
+        Journal.recordDeletion(.location, summary: Journal.describe(location),
+                               snapshot: .init(locations: [Journal.entry(location)]), in: context)
         context.delete(location)
         try? context.save()
     }
@@ -259,9 +262,10 @@ struct AssetsView: View {
             blockedMessage = "\(asset.name) için kayıtlı işlem var. Önce o işlemleri silin."
             return
         }
-        for price in ledger.prices where price.assetID == asset.id {
-            context.delete(price)
-        }
+        let prices = ledger.prices.filter { $0.assetID == asset.id }
+        Journal.recordDeletion(.asset, summary: Journal.describe(asset, priceCount: prices.count),
+                               snapshot: .init(assets: [Journal.entry(asset)], prices: prices.map(Journal.entry)), in: context)
+        prices.forEach(context.delete)
         context.delete(asset)
         try? context.save()
     }

@@ -4,6 +4,8 @@ import SwiftUI
 struct SummaryView: View {
     @Environment(\.ledger) private var ledger
     @Environment(AppRouter.self) private var router
+    @Environment(PriceUpdater.self) private var updater: PriceUpdater?
+    @Environment(\.modelContext) private var context
     @State private var selectedFilter: PersonFilter?
     @State private var grouping: Grouping = .asset
     @State private var isAdding = false
@@ -22,6 +24,7 @@ struct SummaryView: View {
         let colors = ChartPalette.colors(for: groups, calculator: calculator)
         let sixMonthsAgo = Calendar.current.date(byAdding: .month, value: -6, to: .now)
         let trend = calculator.valueHistory(for: filter, since: sixMonthsAgo)
+        let upcoming = ledger.upcomingPayments(within: 7, for: filter)
 
         NavigationStack {
             List {
@@ -35,8 +38,22 @@ struct SummaryView: View {
                 }
 
                 Section {
-                    NetWorthHeader(summary: summary)
-                        .listRowBackground(HeroBackground())
+                    NetWorthHeader(
+                        summary: summary,
+                        daily: calculator.dailyChange(for: filter),
+                        priceDate: calculator.latestPriceDate(for: filter)
+                    )
+                    .listRowBackground(HeroBackground())
+                }
+
+                if !upcoming.isEmpty {
+                    Section {
+                        Button {
+                            router.tab = .debts
+                        } label: {
+                            UpcomingPaymentsCard(items: upcoming)
+                        }
+                    }
                 }
 
                 if !summary.missingPrices.isEmpty {
@@ -128,6 +145,9 @@ struct SummaryView: View {
                 }
             }
             .navigationTitle("Özet")
+            .refreshable {
+                await updater?.update(assets: ledger.assets, prices: ledger.prices, context: context)
+            }
             .navigationDestination(for: GroupKey.self) { key in
                 GroupDetailView(key: key, filter: filter)
             }
@@ -160,6 +180,8 @@ struct SummaryView: View {
 
 private struct NetWorthHeader: View {
     let summary: PortfolioSummary
+    let daily: DailyChange?
+    let priceDate: Date?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -174,6 +196,9 @@ private struct NetWorthHeader: View {
                     .minimumScaleFactor(0.5)
                     .contentTransition(.numericText())
                     .animation(.default, value: summary.netWorth)
+                if daily != nil || priceDate != nil {
+                    todayLine
+                }
             }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 18) { metrics }
@@ -183,6 +208,32 @@ private struct NetWorthHeader: View {
         .padding(.vertical, 10)
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
+    }
+
+    /// "Bugün +₺1.240 (%0,4) · Fiyatlar 14:32"
+    private var todayLine: some View {
+        HStack(spacing: 6) {
+            if let daily {
+                Text("Bugün \(Format.signedLira(daily.change))" + (daily.ratio.map { " (\(Format.signedPercent($0)))" } ?? ""))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(daily.change < 0 ? Color(hex: 0xFF9E94) : Color(hex: 0x8FE3B0))
+                    .monospacedDigit()
+            }
+            if let priceDate {
+                Text((daily == nil ? "" : "· ") + "Fiyatlar " + Self.priceTime(priceDate))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.footnote)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+    }
+
+    private static func priceTime(_ date: Date) -> String {
+        let time = date.formatted(.dateTime.hour().minute().locale(Format.locale))
+        if Calendar.current.isDateInToday(date) { return time }
+        if Calendar.current.isDateInYesterday(date) { return "dün \(time)" }
+        return Format.dateTime(date)
     }
 
     @ViewBuilder
@@ -349,6 +400,61 @@ private struct LocationsLinkLabel: View {
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(Theme.green.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+}
+
+/// Önümüzdeki 7 günde ödemesi olan borçlar; dokununca Borçlar açılır.
+private struct UpcomingPaymentsCard: View {
+    let items: [(debt: Debt, payment: UpcomingPayment)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text("Yaklaşan ödemeler").foregroundStyle(Color.primary)
+            } icon: {
+                Image(systemName: "calendar.badge.clock")
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Color(hex: 0xC0392B).gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            ForEach(items.prefix(4), id: \.debt.id) { item in
+                HStack(spacing: 12) {
+                    DebtIcon(kind: item.debt.kind, institution: item.debt.institution, size: 32)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.debt.title.isEmpty ? item.debt.kind.title : item.debt.title)
+                            .foregroundStyle(Color.primary)
+                        Text(item.debt.institution.isEmpty ? item.debt.kind.title : item.debt.institution)
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        if let amount = item.payment.amount {
+                            Text(Format.lira(amount))
+                                .foregroundStyle(Color.primary)
+                                .monospacedDigit()
+                        }
+                        Text(Self.when(item.payment.date))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(item.payment.date < Calendar.current.startOfDay(for: .now) ? Theme.negative : Color.orange)
+                    }
+                }
+                .padding(.leading, 6)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    static func when(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: date)).day ?? 0
+        switch days {
+        case ..<0: return "Gecikti · \(Format.date(date))"
+        case 0: return "Bugün"
+        case 1: return "Yarın"
+        default: return "\(days) gün sonra"
         }
     }
 }

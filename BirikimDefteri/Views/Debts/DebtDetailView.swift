@@ -34,6 +34,9 @@ struct DebtDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if debt.kind != .creditCard, !payments.isEmpty {
+                    DebtProgress(paid: payments.sum(\.amount), remaining: debt.remaining, months: plan?.months)
+                }
                 LabeledContent("Kalan borç") {
                     Text(Format.lira(debt.remaining))
                         .font(.headline)
@@ -120,6 +123,7 @@ struct DebtDetailView: View {
             before: before, after: Journal.PaymentSnapshot(payment: nil, debt: Journal.entry(debt)), in: context
         )
         try? context.save()
+        Haptics.warning()
     }
 }
 
@@ -194,6 +198,51 @@ struct DebtPaymentFormView: View {
             before: before, after: Journal.PaymentSnapshot(payment: Journal.entry(payment), debt: Journal.entry(debt)), in: context
         )
         try? context.save()
+        Haptics.success()
         dismiss()
+    }
+}
+
+/// Ödenen ve kalan kısmı gösteren halka.
+private struct DebtProgress: View {
+    let paid: Decimal
+    let remaining: Decimal
+    let months: Int?
+    @ScaledMetric private var ringSize: CGFloat = 72
+
+    var body: some View {
+        let total = paid + remaining
+        let progress = total > 0 ? (paid / total).doubleValue : 0
+
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 9)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(Theme.positive.gradient, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text(Format.percent(Decimal(progress)))
+                    .font(.subheadline.weight(.bold))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                    .padding(10)
+            }
+            .frame(width: ringSize, height: ringSize)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(Format.percent(Decimal(progress))) ödendi")
+                    .font(.headline)
+                Text("\(Format.lira(paid)) ödendi · \(Format.lira(remaining)) kaldı")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let months {
+                    Text("\(months) taksit kaldı")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -118,6 +118,7 @@ struct DebtFormView: View {
                         for payment in ledger.payments(for: debt) { context.delete(payment) }
                         context.delete(debt)
                         try? context.save()
+                        Haptics.warning()
                     }
                     dismiss()
                 }
@@ -173,6 +174,7 @@ struct DebtFormView: View {
             Journal.recordDebt(.added, summary: Journal.describe(debt), before: nil, after: debt, in: context)
         }
         try? context.save()
+        Haptics.success()
         dismiss()
     }
 }

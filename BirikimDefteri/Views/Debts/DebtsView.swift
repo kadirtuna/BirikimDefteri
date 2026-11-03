@@ -75,6 +75,7 @@ struct DebtsView: View {
                                         for payment in ledger.payments(for: debt) { context.delete(payment) }
                                         context.delete(debt)
                                         try? context.save()
+                                        Haptics.warning()
                                     }
                                 }
                             }

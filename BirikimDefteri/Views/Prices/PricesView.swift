@@ -1,3 +1,4 @@
+import Charts
 import SwiftData
 import SwiftUI
 
@@ -33,7 +34,8 @@ struct PricesView: View {
                             asset: asset,
                             latest: ledger.calculator.latestPrices[asset.id],
                             isAutomatic: QuoteKey.key(for: asset.info) != nil,
-                            monthChange: ledger.calculator.marketChange(of: asset.id, since: Date.now.addingTimeInterval(-30 * 86_400)),
+                            monthChange: ledger.calculator.marketChange(of: asset.id, since: monthAgo),
+                            history: recentPrices(of: asset.id),
                             state: state(for: asset),
                             text: Binding(
                                 get: { drafts[asset.id] ?? "" },
@@ -42,7 +44,7 @@ struct PricesView: View {
                         )
                     }
                 } footer: {
-                    Text("1 birimin Türk lirası karşılığını girin. Kaydet'e bastığınızda yalnızca değiştirdiğiniz fiyatlar kaydedilir. Otomatik işaretli ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir.")
+                    Text("Küçük grafik ve yüzde son 30 günü gösterir. 1 birimin Türk lirası karşılığını girin. Kaydet'e bastığınızda yalnızca değiştirdiğiniz fiyatlar kaydedilir. Otomatik işaretli ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir.")
                 }
 
                 if let savedCount {
@@ -71,6 +73,17 @@ struct PricesView: View {
                 fillMissingDrafts()
             }
         }
+    }
+
+    private var monthAgo: Date { Date.now.addingTimeInterval(-30 * 86_400) }
+
+    /// Son 30 günün fiyat kayıtları; dönem başındaki fiyat da başlangıç noktası olarak eklenir.
+    private func recentPrices(of assetID: UUID) -> [PriceInfo] {
+        let history = ledger.calculator.priceHistory[assetID] ?? []
+        let start = monthAgo
+        let recent = history.filter { $0.date > start }
+        guard let base = history.last(where: { $0.date <= start }) else { return recent }
+        return [PriceInfo(assetID: assetID, price: base.price, date: start)] + recent
     }
 
     private var pricedAssets: [Asset] {
@@ -118,6 +131,7 @@ struct PricesView: View {
         try? context.save()
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         savedCount = changes.count
+        if !changes.isEmpty { Haptics.success() }
     }
 }
 
@@ -126,26 +140,35 @@ private struct PriceRow: View {
     let latest: PriceInfo?
     let isAutomatic: Bool
     let monthChange: Decimal?
+    let history: [PriceInfo]
     let state: PriceDraftState
     @Binding var text: String
     @ScaledMetric private var iconSize: CGFloat = 38
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             AssetIcon(asset: asset.info, size: iconSize)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(asset.name)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if history.count > 1 || monthChange != nil {
+                    HStack(spacing: 6) {
+                        if history.count > 1 {
+                            PriceSparkline(points: history, isDown: (monthChange ?? 0) < 0)
+                        }
+                        if let monthChange {
+                            ChangeBadge(change: monthChange)
+                        }
+                    }
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(latest == nil ? Color.orange : Color.secondary)
             }
             Spacer(minLength: 8)
-            TextField("₺0,00", text: $text)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .monospacedDigit()
-                .foregroundStyle(state == .invalid ? Theme.negative : Color.primary)
-                .frame(maxWidth: 150)
+            DecimalTextField(placeholder: "₺0,00", text: $text, isInvalid: state == .invalid, accessibilityLabel: "\(asset.name) fiyatı")
+                .frame(width: 104)
             Image(systemName: state == .invalid ? "exclamationmark.circle.fill" : "pencil.circle.fill")
                 .foregroundStyle(state == .invalid ? Theme.negative : Theme.gold)
                 .opacity(state == .unchanged ? 0 : 1)
@@ -157,8 +180,51 @@ private struct PriceRow: View {
     private var subtitle: String {
         let source = isAutomatic ? " · otomatik" : " · elle"
         guard let latest else { return "1 \(asset.unit.symbol) · Fiyat girilmedi\(source)" }
-        let change = monthChange.map { " · 1 ayda \(Format.signedPercent($0))" } ?? ""
-        return "1 \(asset.unit.symbol) · \(Format.dateTime(latest.date))\(source)\(change)"
+        let date = latest.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(Format.locale))
+        return "1 \(asset.unit.symbol) · \(date)\(source)"
+    }
+}
+
+/// Son 30 günün küçük fiyat grafiği.
+private struct PriceSparkline: View {
+    let points: [PriceInfo]
+    let isDown: Bool
+
+    var body: some View {
+        Chart(points, id: \.date) { point in
+            LineMark(x: .value("Tarih", point.date), y: .value("Fiyat", point.price.doubleValue))
+                .interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .foregroundStyle(isDown ? Theme.negative : Theme.positive)
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartYScale(domain: .automatic(includesZero: false))
+        .chartLegend(.hidden)
+        .frame(width: 40, height: 16)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Yeşil (artış) ya da kırmızı (düşüş) yüzde rozeti.
+private struct ChangeBadge: View {
+    let change: Decimal
+
+    var body: some View {
+        let color: Color = change > 0 ? Theme.positive : change < 0 ? Theme.negative : .secondary
+        HStack(spacing: 2) {
+            Image(systemName: change > 0 ? "arrow.up.right" : change < 0 ? "arrow.down.right" : "equal")
+            Text(Format.signedPercent(change))
+                .monospacedDigit()
+        }
+        .font(.caption2.weight(.semibold))
+        .lineLimit(1)
+        .fixedSize()
+        .foregroundStyle(color)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.14), in: Capsule())
+        .accessibilityLabel("30 günde \(Format.signedPercent(change))")
     }
 }
 

@@ -13,6 +13,17 @@ struct TransactionsView: View {
     @State private var isAddingTransfer = false
     @State private var deleteError: String?
     @State private var undoEntry: JournalEntry?
+    @State private var query = ""
+    @State private var repeating: TransactionRecord?
+    @State private var transferPrefill: TransferPrefill?
+    @State private var showsDeleted = false
+
+    private struct TransferPrefill: Identifiable {
+        let id = UUID()
+        let assetID: UUID
+        let personID: UUID
+        let fromID: UUID
+    }
 
     private struct MonthSection: Identifiable {
         let month: Date
@@ -36,14 +47,10 @@ struct TransactionsView: View {
                     }
                 }
                 ForEach(sections) { section in
-                    Section(Format.month(section.month)) {
+                    Section {
                         ForEach(section.records) { record in
                             Button {
-                                if let transferID = record.transferID {
-                                    editingTransfer = TransferRef(id: transferID)
-                                } else {
-                                    editing = record
-                                }
+                                open(record)
                             } label: {
                                 TransactionRow(info: record.info, note: record.note)
                             }
@@ -52,13 +59,24 @@ struct TransactionsView: View {
                                     delete(record)
                                 }
                             }
+                            .swipeActions(edge: .leading) {
+                                if record.transferID == nil {
+                                    Button("Tekrarla", systemImage: "arrow.clockwise") { repeating = record }
+                                        .tint(Theme.green)
+                                }
+                            }
+                            .contextMenu { menu(for: record) }
                         }
+                    } header: {
+                        MonthHeader(month: section.month, records: section.records)
                     }
                 }
             }
             .overlay {
                 if sections.isEmpty {
-                    if isFiltering {
+                    if !query.trimmed.isEmpty {
+                        ContentUnavailableView.search(text: query)
+                    } else if isFiltering {
                         ContentUnavailableView("Eşleşen kayıt yok", systemImage: "line.3.horizontal.decrease.circle")
                     } else {
                         ContentUnavailableView(
@@ -70,6 +88,10 @@ struct TransactionsView: View {
                 }
             }
             .navigationTitle("Kayıtlar")
+            .searchable(text: $query, prompt: "Ürün, yer, kişi ya da not")
+            .navigationDestination(isPresented: $showsDeleted) {
+                JournalView(filter: .deleted)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { filterMenu }
                 ToolbarItem(placement: .primaryAction) {
@@ -87,6 +109,12 @@ struct TransactionsView: View {
             }
             .sheet(isPresented: $isAddingTransfer) {
                 TransferFormView()
+            }
+            .sheet(item: $repeating) { record in
+                TransactionFormView(template: record)
+            }
+            .sheet(item: $transferPrefill) { prefill in
+                TransferFormView(assetID: prefill.assetID, personID: prefill.personID, fromID: prefill.fromID)
             }
             .overlay(alignment: .bottom) {
                 if undoEntry != nil {
@@ -129,11 +157,47 @@ struct TransactionsView: View {
             if isFiltering {
                 Button("Filtreleri temizle", systemImage: "xmark.circle", role: .destructive, action: clearFilters)
             }
+            Divider()
+            Button("Silinenler", systemImage: "trash") { showsDeleted = true }
         } label: {
             Label("Filtrele", systemImage: isFiltering
                 ? "line.3.horizontal.decrease.circle.fill"
                 : "line.3.horizontal.decrease.circle")
         }
+    }
+
+    @ViewBuilder
+    private func menu(for record: TransactionRecord) -> some View {
+        Button("Düzenle", systemImage: "pencil") { open(record) }
+        if record.transferID == nil {
+            Button("Tekrarla", systemImage: "arrow.clockwise") { repeating = record }
+            Button("Başka yere aktar", systemImage: "arrow.left.arrow.right") {
+                transferPrefill = TransferPrefill(assetID: record.assetID, personID: record.personID, fromID: record.locationID)
+            }
+        }
+        Divider()
+        Button("Sil", systemImage: "trash", role: .destructive) { delete(record) }
+    }
+
+    private func open(_ record: TransactionRecord) {
+        if let transferID = record.transferID {
+            editingTransfer = TransferRef(id: transferID)
+        } else {
+            editing = record
+        }
+    }
+
+    /// Aramada ürün, kişi, yer (aktarımda iki yer de), işlem türü ve not aranır.
+    private func matches(_ record: TransactionRecord, _ query: String) -> Bool {
+        var fields = [
+            ledger.calculator.assets[record.assetID]?.name ?? "", ledger.personName(record.personID),
+            ledger.locationName(record.locationID), record.kind.title, record.note,
+        ]
+        if let transferID = record.transferID {
+            let legs = ledger.transferLegs(transferID)
+            fields += [legs.out, legs.in].compactMap { $0.map { ledger.locationName($0.locationID) } }
+        }
+        return fields.contains { $0.localizedStandardContains(query) }
     }
 
     private var isFiltering: Bool {
@@ -150,11 +214,13 @@ struct TransactionsView: View {
 
     private var monthSections: [MonthSection] {
         let calendar = Calendar.current
+        let query = query.trimmed
         let records = ledger.transactions
             .filter { record in
                 (assetFilter == nil || record.assetID == assetFilter)
                     && (locationFilter == nil || record.locationID == locationFilter)
                     && (personFilter == nil || record.personID == personFilter)
+                    && (query.isEmpty || matches(record, query))
             }
             .sorted { ($0.date, $0.createdAt) > ($1.date, $1.createdAt) }
         // Aktarımın iki ayağından yalnızca biri satır olarak gösterilir.
@@ -197,6 +263,7 @@ struct TransactionsView: View {
         undoEntry = Journal.recordTransactions(.deleted, summary: summary, before: records, after: [], in: context)
         records.forEach(context.delete)
         try? context.save()
+        Haptics.warning()
     }
 
     private func undoLastDeletion() {
@@ -204,8 +271,32 @@ struct TransactionsView: View {
         self.undoEntry = nil
         do {
             try Journal.undo(undoEntry, ledger: ledger, context: context)
+            Haptics.success()
         } catch {
             deleteError = error.localizedDescription
+        }
+    }
+}
+
+/// Ay başlığı ve o ayın toplam alım ile satımı (aktarımlar hariç).
+private struct MonthHeader: View {
+    let month: Date
+    let records: [TransactionRecord]
+
+    var body: some View {
+        let trades = records.filter { $0.transferID == nil }
+        let bought = trades.filter { $0.kind == .buy }.sum { $0.info.total }
+        let sold = trades.filter { $0.kind == .sell }.sum { $0.info.total }
+        let parts = [bought > 0 ? "Alım \(Format.lira(bought))" : nil, sold > 0 ? "Satış \(Format.lira(sold))" : nil].compactMap { $0 }
+
+        HStack(alignment: .firstTextBaseline) {
+            Text(Format.month(month))
+            Spacer(minLength: 8)
+            Text(parts.joined(separator: " · "))
+                .font(.caption)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 }

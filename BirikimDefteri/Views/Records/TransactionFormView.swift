@@ -27,13 +27,15 @@ struct TransactionFormView: View {
     @State private var isConfirmingDelete = false
     @State private var deleteError: String?
 
-    init(record: TransactionRecord? = nil, assetID: UUID? = nil) {
+    /// `template` verilirse ("Tekrarla") aynı işlem bugünün tarihiyle yeni kayıt olarak açılır; fiyat boş kalır, güncel fiyat önerilir.
+    init(record: TransactionRecord? = nil, assetID: UUID? = nil, template: TransactionRecord? = nil) {
         self.record = record
-        _kind = State(initialValue: record?.kind ?? .buy)
-        _assetID = State(initialValue: record?.assetID ?? assetID)
-        _personID = State(initialValue: record?.personID)
-        _locationID = State(initialValue: record?.locationID)
-        _quantityText = State(initialValue: record.map { Format.editable($0.quantity) } ?? "")
+        let source = record ?? template
+        _kind = State(initialValue: source?.kind ?? .buy)
+        _assetID = State(initialValue: source?.assetID ?? assetID)
+        _personID = State(initialValue: source?.personID)
+        _locationID = State(initialValue: source?.locationID)
+        _quantityText = State(initialValue: source.map { Format.editable($0.quantity) } ?? "")
         let editablePrice = record.flatMap { $0.assetID == AssetInfo.liraID ? nil : Format.editable($0.unitPrice) }
         _unitPriceText = State(initialValue: editablePrice ?? "")
         _date = State(initialValue: record?.date ?? .now)
@@ -125,8 +127,10 @@ struct TransactionFormView: View {
             }
             .keyboardDoneButton()
             .onAppear {
-                if personID == nil { personID = ledger.people.first?.id }
-                if locationID == nil { locationID = ledger.locations.first?.id }
+                if personID == nil { personID = RecentChoices.person(among: ledger.people.map(\.id)) ?? ledger.people.first?.id }
+                if locationID == nil {
+                    locationID = RecentChoices.location(among: ledger.locations.map(\.id)) ?? ledger.locations.first?.id
+                }
             }
             .onChange(of: personID) { old, new in
                 if new == Self.addNewID {
@@ -245,8 +249,10 @@ struct TransactionFormView: View {
             let record = TransactionRecord(info: draft, note: note.trimmed)
             context.insert(record)
             Journal.recordTransactions(.added, summary: summary, before: [TransactionRecord](), after: [record], in: context)
+            RecentChoices.remember(personID: draft.personID, locationID: draft.locationID)
         }
         try? context.save()
+        Haptics.success()
         dismiss()
     }
 
@@ -264,6 +270,7 @@ struct TransactionFormView: View {
         Journal.recordTransactions(.deleted, summary: Journal.describe(record.info, ledger: ledger), before: [record], after: [], in: context)
         context.delete(record)
         try? context.save()
+        Haptics.warning()
         dismiss()
     }
 }

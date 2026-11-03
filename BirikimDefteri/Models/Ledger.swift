@@ -39,6 +39,36 @@ struct Ledger {
         )
     }
 
+    /// Depodaki her şeyle kurulan anlık görüntü; arayüz dışından (Kısayollar, testler) erişim için.
+    static func fetch(from context: ModelContext) -> Ledger {
+        Ledger(
+            people: (try? context.fetch(FetchDescriptor<Person>(sortBy: [SortDescriptor(\.createdAt)]))) ?? [],
+            locations: (try? context.fetch(FetchDescriptor<Location>(sortBy: [SortDescriptor(\.createdAt)]))) ?? [],
+            assets: (try? context.fetch(FetchDescriptor<Asset>(sortBy: [SortDescriptor(\.sortOrder)]))) ?? [],
+            prices: (try? context.fetch(FetchDescriptor<PricePoint>(sortBy: [SortDescriptor(\.date)]))) ?? [],
+            transactions: (try? context.fetch(FetchDescriptor<TransactionRecord>(sortBy: [SortDescriptor(\.date)]))) ?? [],
+            debts: (try? context.fetch(FetchDescriptor<Debt>(sortBy: [SortDescriptor(\.updatedAt)]))) ?? [],
+            payments: (try? context.fetch(FetchDescriptor<DebtPayment>(sortBy: [SortDescriptor(\.date)]))) ?? [],
+            goals: (try? context.fetch(FetchDescriptor<Goal>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+        )
+    }
+
+    /// Önümüzdeki günlerde (ve gecikmiş) ödemesi olan borçlar, tarihe göre.
+    func upcomingPayments(within days: Int, for filter: PersonFilter = .everyone, now: Date = .now) -> [(debt: Debt, payment: UpcomingPayment)] {
+        let calendar = Calendar.current
+        guard let limit = calendar.date(byAdding: .day, value: days, to: calendar.startOfDay(for: now)) else { return [] }
+        return debts
+            .filter { filter.includes($0.personID) }
+            .compactMap { debt in
+                DebtPlan.nextPayment(
+                    kind: debt.kind, remaining: debt.remaining, monthly: debt.monthlyInstallment, dueDate: debt.dueDate,
+                    paymentDay: debt.paymentDay, lastPayment: payments(for: debt).map(\.date).max(), now: now
+                ).map { (debt, $0) }
+            }
+            .filter { $0.payment.date <= limit }
+            .sorted { $0.payment.date < $1.payment.date }
+    }
+
     func transaction(_ id: UUID) -> TransactionRecord? {
         transactions.first { $0.id == id }
     }

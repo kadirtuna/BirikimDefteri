@@ -66,6 +66,32 @@ enum Format {
         value.formatted(.number.locale(locale).grouping(.never).precision(.fractionLength(0...10)))
     }
 
+    /// Yazılırken binlik ayraç ekler: "1234567,5" → "1.234.567,5". Sona yazılan nokta ondalık sayılıp virgüle çevrilir.
+    /// Silmede ayraçlar baştan hesaplanır; böylece "1.234" iken son rakam silinince "1.23" ondalık sanılmaz.
+    /// Boş alana yapıştırılan "12.5" gibi tek noktalı ve ardında üç rakam olmayan sayılar da ondalık okunur.
+    static func groupedInput(_ text: String, previous: String) -> String {
+        var cleaned = text.filter { $0.isNumber || $0 == "," || $0 == "." }
+        if !cleaned.contains(","), cleaned.count > previous.count {
+            let dots = cleaned.filter { $0 == "." }.count
+            if cleaned.hasSuffix(".") {
+                cleaned = String(cleaned.dropLast()) + ","
+            } else if previous.isEmpty, dots == 1, let dot = cleaned.firstIndex(of: "."),
+                      cleaned[cleaned.index(after: dot)...].count != 3 {
+                cleaned.replaceSubrange(dot...dot, with: ",")
+            }
+        }
+        let parts = cleaned.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+        let integer = parts.first.map { $0.filter(\.isNumber) } ?? ""
+        var grouped = ""
+        for (index, digit) in integer.reversed().enumerated() {
+            if index > 0, index % 3 == 0 { grouped.append(".") }
+            grouped.append(digit)
+        }
+        grouped = String(grouped.reversed())
+        guard parts.count > 1 else { return grouped }
+        return grouped + "," + parts[1].filter(\.isNumber)
+    }
+
     /// "1.234,50", "12,5", "0.25" ve "₺2.950" gibi girişleri okur. Geçersizse nil.
     /// Virgül yoksa, ardından tam üç rakam gelen nokta Türkçedeki gibi binlik ayırıcı sayılır.
     static func parseDecimal(_ text: String) -> Decimal? {

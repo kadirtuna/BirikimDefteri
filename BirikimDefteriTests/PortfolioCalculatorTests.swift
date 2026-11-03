@@ -706,3 +706,168 @@ struct InstitutionTests {
         #expect(Set(aliases).count == aliases.count)
     }
 }
+
+@Suite("Günlük değişim ve yaklaşan ödemeler")
+struct DailyAndUpcomingTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Istanbul")!
+        return calendar
+    }
+
+    private func date(_ text: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.date(from: text)!
+    }
+
+    @Test("Bugünkü değişim dünkü son fiyata göre hesaplanır; TL yalnızca oranı etkiler")
+    func dailyChangeComparesWithYesterday() {
+        let now = date("2026-11-03 15:00")
+        let calculator = PortfolioCalculator(
+            people: [Fixture.me], locations: [Fixture.home], assets: [Fixture.lira, Fixture.gram],
+            prices: [
+                PriceInfo(assetID: Fixture.gram.id, price: 2000, date: date("2026-11-02 21:00")),
+                PriceInfo(assetID: Fixture.gram.id, price: 2100, date: date("2026-11-03 09:00")),
+            ],
+            transactions: [
+                TransactionInfo(id: UUID(), kind: .buy, personID: Fixture.me.id, assetID: Fixture.gram.id, locationID: Fixture.home.id,
+                                quantity: 10, unitPrice: 1900, date: date("2026-10-01 00:00"), createdAt: date("2026-10-01 00:00")),
+                TransactionInfo(id: UUID(), kind: .buy, personID: Fixture.me.id, assetID: AssetInfo.liraID, locationID: Fixture.home.id,
+                                quantity: 1000, unitPrice: 1, date: date("2026-10-01 00:00"), createdAt: date("2026-10-01 00:00")),
+            ]
+        )
+        let daily = calculator.dailyChange(now: now, calendar: calendar)
+        #expect(daily?.change == 1000)
+        #expect(daily?.ratio == Decimal(1000) / Decimal(21000))
+        #expect(calculator.dailyChange(now: date("2026-11-04 08:00"), calendar: calendar) == nil)
+    }
+
+    @Test("Kredi kartında son ödeme tarihi; bir aydan eski gecikme gösterilmez")
+    func creditCardUsesDueDate() {
+        let now = date("2026-11-03 12:00")
+        let soon = DebtPlan.nextPayment(kind: .creditCard, remaining: 4210, monthly: nil, dueDate: date("2026-11-05 00:00"),
+                                        paymentDay: nil, lastPayment: nil, now: now, calendar: calendar)
+        #expect(soon == UpcomingPayment(date: date("2026-11-05 00:00"), amount: 4210))
+        let stale = DebtPlan.nextPayment(kind: .creditCard, remaining: 4210, monthly: nil, dueDate: date("2026-09-20 00:00"),
+                                         paymentDay: nil, lastPayment: nil, now: now, calendar: calendar)
+        #expect(stale == nil)
+        let paidOff = DebtPlan.nextPayment(kind: .creditCard, remaining: 0, monthly: nil, dueDate: date("2026-11-05 00:00"),
+                                           paymentDay: nil, lastPayment: nil, now: now, calendar: calendar)
+        #expect(paidOff == nil)
+    }
+
+    @Test("Taksit günü: bu ay geçtiyse ya da erken ödendiyse sonraki ay; kısa aylarda ayın son günü")
+    func installmentDay() {
+        func next(_ now: String, day: Int, paid: String? = nil) -> Date? {
+            DebtPlan.nextPayment(kind: .loan, remaining: 85_400, monthly: 6250, dueDate: nil, paymentDay: day,
+                                 lastPayment: paid.map(date), now: date(now), calendar: calendar)?.date
+        }
+        #expect(next("2026-11-03 10:00", day: 5) == date("2026-11-05 00:00"))
+        #expect(next("2026-11-10 10:00", day: 5) == date("2026-12-05 00:00"))
+        #expect(next("2026-11-03 10:00", day: 5, paid: "2026-11-02 10:00") == date("2026-12-05 00:00"))
+        #expect(next("2026-11-03 10:00", day: 5, paid: "2026-10-05 10:00") == date("2026-11-05 00:00"))
+        #expect(next("2027-02-10 10:00", day: 31) == date("2027-02-28 00:00"))
+    }
+}
+
+@Suite("Yazarken binlik ayraç")
+struct GroupedInputTests {
+    @Test("Ayraç eklenir, silmede baştan hesaplanır, nokta ondalık sayılır", arguments: [
+        ("1234", "123", "1.234"),
+        ("1.2345", "1.234", "12.345"),
+        ("1.23", "1.234", "123"),
+        ("12.", "12", "12,"),
+        ("1.234,5", "1.234,", "1.234,5"),
+        ("1234567,25", "", "1.234.567,25"),
+        ("12.5", "", "12,5"),
+        ("1.234", "", "1.234"),
+        ("", "1", ""),
+    ])
+    func groups(text: String, previous: String, expected: String) {
+        #expect(Format.groupedInput(text, previous: previous) == expected)
+        #expect(Format.parseDecimal(expected) == Format.parseDecimal(Format.groupedInput(expected, previous: expected)))
+    }
+}
+
+@MainActor
+@Suite("Silinenler ve geri yükleme")
+struct DeletionHistoryTests {
+    private func makeContainer() throws -> ModelContainer {
+        let container = try ModelContainer(
+            for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self,
+            DebtPayment.self, Goal.self, JournalEntry.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        Store.seedIfNeeded(in: container.mainContext)
+        return container
+    }
+
+    @Test("Silme kayıtları 500 sınırında budanmaz")
+    func deletionsAreNeverPruned() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let goal = Goal(title: "Örnek hedef", kind: .netWorth, target: 1000, assetID: nil, personID: nil)
+        context.insert(goal)
+        Journal.recordDeletion(.goal, summary: Journal.describe(goal), snapshot: .init(goals: [Journal.entry(goal)]), in: context)
+        context.delete(goal)
+        try context.save()
+        for _ in 0..<510 {
+            Journal.recordTransactions(.added, summary: "Ekleme", before: [TransactionRecord](), after: [], in: context)
+            try context.save()
+        }
+        let entries = try context.fetch(FetchDescriptor<JournalEntry>())
+        #expect(entries.count == 501)
+        #expect(entries.contains { $0.action == .deleted && $0.entity == .goal })
+    }
+
+    @Test("Silinen ürün fiyat kayıtlarıyla geri getirilir")
+    func deletedAssetComesBackWithPrices() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let fund = Asset(name: "Örnek Fon", unit: .lira, category: .fund, sortOrder: 99)
+        context.insert(fund)
+        context.insert(PricePoint(assetID: fund.id, price: 10, date: .now.addingTimeInterval(-86_400)))
+        context.insert(PricePoint(assetID: fund.id, price: 11, date: .now))
+        try context.save()
+
+        let prices = Ledger.fetch(from: context).prices.filter { $0.assetID == fund.id }
+        let entry = Journal.recordDeletion(.asset, summary: Journal.describe(fund, priceCount: prices.count),
+                                           snapshot: .init(assets: [Journal.entry(fund)], prices: prices.map(Journal.entry)), in: context)
+        prices.forEach(context.delete)
+        context.delete(fund)
+        try context.save()
+        #expect(!Ledger.fetch(from: context).assets.contains { $0.id == fund.id })
+
+        try Journal.undo(entry, ledger: Ledger.fetch(from: context), context: context)
+        let restored = Ledger.fetch(from: context)
+        #expect(restored.assets.contains { $0.id == fund.id && $0.name == "Örnek Fon" })
+        #expect(restored.prices.filter { $0.assetID == fund.id }.count == 2)
+        #expect(entry.isUndone)
+    }
+
+    @Test("Yedekten geri yükleme geri alınır; geri alma da geçmişe yazılır")
+    func restoreCanBeUndone() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        context.insert(Person(name: "Ayşe"))
+        try context.save()
+
+        let backup = BackupFile(
+            exportedAt: .now, people: [.init(id: UUID(), name: "Yeni", createdAt: .now)],
+            locations: [], assets: [], prices: [], transactions: [], debts: []
+        )
+        let entry = Journal.recordRestore(replacing: BackupService.makeBackup(from: Ledger.fetch(from: context)), summary: "Geri yükleme", in: context)
+        try BackupService.restore(backup, into: context)
+        try context.save()
+        #expect(Ledger.fetch(from: context).people.map(\.name) == ["Yeni"])
+
+        try Journal.undo(entry, ledger: Ledger.fetch(from: context), context: context)
+        let names = Set(Ledger.fetch(from: context).people.map(\.name))
+        #expect(names == ["Ben", "Ayşe"])
+        let restores = try context.fetch(FetchDescriptor<JournalEntry>()).filter { $0.action == .restored }
+        #expect(restores.count == 2)
+    }
+}

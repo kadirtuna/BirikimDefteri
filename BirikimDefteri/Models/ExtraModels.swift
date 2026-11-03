@@ -84,13 +84,14 @@ final class JournalEntry {
 }
 
 enum JournalAction: String, Codable, Sendable {
-    case added, edited, deleted
+    case added, edited, deleted, restored
 
     var title: String {
         switch self {
         case .added: "Eklendi"
         case .edited: "Düzenlendi"
         case .deleted: "Silindi"
+        case .restored: "Yedekten geri yüklendi"
         }
     }
 
@@ -99,10 +100,17 @@ enum JournalAction: String, Codable, Sendable {
         case .added: "plus.circle.fill"
         case .edited: "pencil.circle.fill"
         case .deleted: "trash.circle.fill"
+        case .restored: "arrow.counterclockwise.circle.fill"
         }
     }
+
+    /// Bu kayıtlar geçmişten hiç budanmaz; silinen veri her zaman geri getirilebilir.
+    var isKeptForever: Bool { self == .deleted || self == .restored }
 }
 
 enum JournalEntity: String, Codable, Sendable {
     case transaction, transfer, debt, payment
+    case goal, person, location, asset
+    /// Yedekten geri yüklemeden önceki verilerin tamamı.
+    case backup
 }

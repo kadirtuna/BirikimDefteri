@@ -11,6 +11,15 @@ enum Journal {
         var debt: BackupFile.DebtEntry
     }
 
+    /// Silinen hedef, kişi, yer ya da ürünün (fiyat kayıtlarıyla birlikte) anlık görüntüsü.
+    struct RecordSnapshot: Codable {
+        var people: [BackupFile.PersonEntry] = []
+        var locations: [BackupFile.LocationEntry] = []
+        var assets: [BackupFile.AssetEntry] = []
+        var prices: [BackupFile.PriceEntry] = []
+        var goals: [BackupFile.GoalEntry] = []
+    }
+
     enum UndoError: LocalizedError {
         case conflict(String)
         case unreadable
@@ -72,10 +81,32 @@ enum Journal {
         return save(JournalEntry(action: action, entity: .payment, summary: summary, before: encode(before), after: encode(after)), in: context)
     }
 
+    /// Silinmeden hemen önce çağrılır.
+    @discardableResult
+    static func recordDeletion(_ entity: JournalEntity, summary: String, snapshot: RecordSnapshot, in context: ModelContext) -> JournalEntry {
+        save(JournalEntry(action: .deleted, entity: entity, summary: summary, before: encode(snapshot), after: nil), in: context)
+    }
+
+    /// Yedekten geri yüklemeden hemen önce, o anki verilerin tamamıyla çağrılır.
+    @discardableResult
+    static func recordRestore(replacing current: BackupFile, summary: String, in context: ModelContext) -> JournalEntry {
+        let before = (try? BackupService.encode(current)).flatMap { String(data: $0, encoding: .utf8) }
+        return save(JournalEntry(action: .restored, entity: .backup, summary: summary, before: before, after: nil), in: context)
+    }
+
     private static func save(_ entry: JournalEntry, in context: ModelContext) -> JournalEntry {
         context.insert(entry)
-        var descriptor = FetchDescriptor<JournalEntry>(sortBy: [SortDescriptor(\.date, order: .reverse)])
-        descriptor.fetchOffset = keepCount
+        // Silme ve geri yükleme kayıtları budanmaz; sınır yalnızca ekleme ve düzenlemeler içindir.
+        let deleted = JournalAction.deleted.rawValue
+        let restored = JournalAction.restored.rawValue
+        var descriptor = FetchDescriptor<JournalEntry>(
+            predicate: #Predicate { $0.actionRaw != deleted && $0.actionRaw != restored },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        // Kaydedilmemiş kayıtlara fetchOffset uygulanmıyor; dahil edilseler yeni kayıt daha kaydedilmeden silinirdi.
+        // Yeni kayıt sayılmadığı için sınırın bir eksiği atlanır.
+        descriptor.includePendingChanges = false
+        descriptor.fetchOffset = keepCount - 1
         for old in (try? context.fetch(descriptor)) ?? [] { context.delete(old) }
         return entry
     }
@@ -97,6 +128,14 @@ enum Journal {
         return "Borç · \(institution) · \(debt.title.isEmpty ? debt.kind.title : debt.title) · \(Format.plainLira(debt.remaining))"
     }
 
+    static func describe(_ goal: Goal) -> String { "Hedef · \(goal.title)" }
+    static func describe(_ person: Person) -> String { "Kişi · \(person.name)" }
+    static func describe(_ location: Location) -> String { "Saklama yeri · \(location.name)" }
+
+    static func describe(_ asset: Asset, priceCount: Int) -> String {
+        "Ürün · \(asset.name)" + (priceCount > 0 ? " · \(priceCount) fiyat kaydıyla" : "")
+    }
+
     // MARK: Geri alma
 
     static func undo(_ journalEntry: JournalEntry, ledger: Ledger, context: ModelContext) throws {
@@ -107,9 +146,45 @@ enum Journal {
             try undoDebt(journalEntry, ledger: ledger, context: context)
         case .payment:
             try undoPayment(journalEntry, ledger: ledger, context: context)
+        case .goal, .person, .location, .asset:
+            try undoSnapshot(journalEntry, ledger: ledger, context: context)
+        case .backup:
+            try undoRestore(journalEntry, ledger: ledger, context: context)
         }
         journalEntry.isUndone = true
         try context.save()
+    }
+
+    /// Silinenleri yeniden ekler; aynı kimlikle duran kayda dokunmaz.
+    private static func undoSnapshot(_ journalEntry: JournalEntry, ledger: Ledger, context: ModelContext) throws {
+        guard let snapshot: RecordSnapshot = try decode(journalEntry.beforeJSON) else { throw UndoError.unreadable }
+        for entry in snapshot.people where !ledger.people.contains(where: { $0.id == entry.id }) {
+            context.insert(Person(id: entry.id, name: entry.name, createdAt: entry.createdAt))
+        }
+        for entry in snapshot.locations where !ledger.locations.contains(where: { $0.id == entry.id }) {
+            context.insert(Location(id: entry.id, name: entry.name, kind: entry.kind, createdAt: entry.createdAt))
+        }
+        for entry in snapshot.assets where !ledger.assets.contains(where: { $0.id == entry.id }) {
+            context.insert(Asset(id: entry.id, name: entry.name, unit: entry.unit, category: entry.category,
+                                 sortOrder: entry.sortOrder, createdAt: entry.createdAt))
+        }
+        for entry in snapshot.prices where !ledger.prices.contains(where: { $0.id == entry.id }) {
+            context.insert(PricePoint(id: entry.id, assetID: entry.assetID, price: Decimal(storageText: entry.price) ?? 0, date: entry.date))
+        }
+        for entry in snapshot.goals where !ledger.goals.contains(where: { $0.id == entry.id }) {
+            context.insert(Goal(id: entry.id, title: entry.title, kind: entry.kind, target: Decimal(storageText: entry.target) ?? 0,
+                                assetID: entry.assetID, personID: entry.personID, createdAt: entry.createdAt))
+        }
+    }
+
+    /// Yedekten geri yüklemeden önceki hâle döner. Dönmeden önce şimdiki hâl de kaydedilir, böylece bu da geri alınabilir.
+    private static func undoRestore(_ journalEntry: JournalEntry, ledger: Ledger, context: ModelContext) throws {
+        guard let text = journalEntry.beforeJSON, let data = text.data(using: .utf8),
+              let previous = try? BackupService.decode(data)
+        else { throw UndoError.unreadable }
+        recordRestore(replacing: BackupService.makeBackup(from: ledger),
+                      summary: "Geri yükleme geri alındı · \(Format.dateTime(journalEntry.date)) öncesine dönüldü", in: context)
+        try BackupService.restore(previous, into: context)
     }
 
     private static func undoTransactions(_ journalEntry: JournalEntry, ledger: Ledger, context: ModelContext) throws {
@@ -200,6 +275,27 @@ enum Journal {
             remaining: debt.remainingText, monthlyInstallment: debt.monthlyInstallmentText, dueDate: debt.dueDate,
             note: debt.note, updatedAt: debt.updatedAt, paymentDay: debt.paymentDay
         )
+    }
+
+    static func entry(_ person: Person) -> BackupFile.PersonEntry {
+        .init(id: person.id, name: person.name, createdAt: person.createdAt)
+    }
+
+    static func entry(_ location: Location) -> BackupFile.LocationEntry {
+        .init(id: location.id, name: location.name, kind: location.kind, createdAt: location.createdAt)
+    }
+
+    static func entry(_ asset: Asset) -> BackupFile.AssetEntry {
+        .init(id: asset.id, name: asset.name, unit: asset.unit, category: asset.category, sortOrder: asset.sortOrder, createdAt: asset.createdAt)
+    }
+
+    static func entry(_ price: PricePoint) -> BackupFile.PriceEntry {
+        .init(id: price.id, assetID: price.assetID, price: price.priceText, date: price.date)
+    }
+
+    static func entry(_ goal: Goal) -> BackupFile.GoalEntry {
+        .init(id: goal.id, title: goal.title, kind: goal.kind, target: goal.targetText, assetID: goal.assetID,
+              personID: goal.personID, createdAt: goal.createdAt)
     }
 
     static func entry(_ payment: DebtPayment) -> BackupFile.DebtPaymentEntry {
