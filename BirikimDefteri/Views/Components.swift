@@ -97,3 +97,13 @@ extension Binding where Value == Bool {
         )
     }
 }
+
+/// "Tutarları gizle" ayarı. Biçimlendiriciyi hemen günceller, ayarı saklar; kök görünüm yeniden çizilir.
+enum AmountPrivacy {
+    static let key = "hideAmounts"
+
+    static func set(_ hidden: Bool) {
+        Format.hidesAmounts = hidden
+        UserDefaults.standard.set(hidden, forKey: key)
+    }
+}

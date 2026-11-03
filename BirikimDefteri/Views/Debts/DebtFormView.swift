@@ -17,6 +17,7 @@ struct DebtFormView: View {
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
     @State private var note: String
+    @State private var paymentDay: Int?
     @State private var isConfirmingDelete = false
 
     init(debt: Debt? = nil) {
@@ -30,6 +31,7 @@ struct DebtFormView: View {
         _hasDueDate = State(initialValue: debt?.dueDate != nil)
         _dueDate = State(initialValue: debt?.dueDate ?? .now)
         _note = State(initialValue: debt?.note ?? "")
+        _paymentDay = State(initialValue: debt?.paymentDay)
     }
 
     var body: some View {
@@ -57,6 +59,17 @@ struct DebtFormView: View {
                 Section {
                     DecimalField(title: "Kalan tutar", placeholder: "₺0,00", text: $remainingText)
                     DecimalField(title: "Aylık taksit", placeholder: "Opsiyonel", text: $monthlyText)
+                }
+
+                if kind != .creditCard {
+                    Section {
+                        Picker("Taksit günü", selection: $paymentDay) {
+                            Text("Yok").tag(Int?.none)
+                            ForEach(1...28, id: \.self) { Text("Her ayın \($0)'i").tag(Optional($0)) }
+                        }
+                    } footer: {
+                        Text("Ödeme hatırlatmaları açıksa her ay bu gün bildirim gelir.")
+                    }
                 }
 
                 Section {
@@ -100,6 +113,8 @@ struct DebtFormView: View {
             .confirmationDialog("Bu borç silinsin mi?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
                 Button("Borcu sil", role: .destructive) {
                     if let debt {
+                        Journal.recordDebt(.deleted, summary: Journal.describe(debt), before: Journal.entry(debt), after: nil, in: context)
+                        for payment in ledger.payments(for: debt) { context.delete(payment) }
                         context.delete(debt)
                         try? context.save()
                     }
@@ -134,7 +149,9 @@ struct DebtFormView: View {
         guard let personID, let remaining, problem == nil else { return }
         let monthly = monthlyText.trimmed.isEmpty ? nil : monthly
         let dueDate = hasDueDate ? Calendar.current.startOfDay(for: dueDate) : nil
+        let day = kind == .creditCard ? nil : paymentDay
         if let debt {
+            let before = Journal.entry(debt)
             debt.personID = personID
             debt.institution = institution.trimmed
             debt.kind = kind
@@ -143,12 +160,16 @@ struct DebtFormView: View {
             debt.monthlyInstallment = monthly
             debt.dueDate = dueDate
             debt.note = note.trimmed
+            debt.paymentDay = day
             debt.updatedAt = .now
+            Journal.recordDebt(.edited, summary: Journal.describe(debt), before: before, after: debt, in: context)
         } else {
-            context.insert(Debt(
+            let debt = Debt(
                 personID: personID, institution: institution.trimmed, kind: kind, title: title.trimmed,
-                remaining: remaining, monthlyInstallment: monthly, dueDate: dueDate, note: note.trimmed
-            ))
+                remaining: remaining, monthlyInstallment: monthly, dueDate: dueDate, note: note.trimmed, paymentDay: day
+            )
+            context.insert(debt)
+            Journal.recordDebt(.added, summary: Journal.describe(debt), before: nil, after: debt, in: context)
         }
         try? context.save()
         dismiss()

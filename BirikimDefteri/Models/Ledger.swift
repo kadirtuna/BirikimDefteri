@@ -10,13 +10,16 @@ struct Ledger {
     var prices: [PricePoint] = []
     var transactions: [TransactionRecord] = []
     var debts: [Debt] = []
+    var payments: [DebtPayment] = []
+    var goals: [Goal] = []
     var calculator = PortfolioCalculator()
 
     init() {}
 
     init(
         people: [Person], locations: [Location], assets: [Asset],
-        prices: [PricePoint], transactions: [TransactionRecord], debts: [Debt]
+        prices: [PricePoint], transactions: [TransactionRecord], debts: [Debt],
+        payments: [DebtPayment] = [], goals: [Goal] = []
     ) {
         self.people = people
         self.locations = locations
@@ -24,6 +27,8 @@ struct Ledger {
         self.prices = prices
         self.transactions = transactions
         self.debts = debts
+        self.payments = payments
+        self.goals = goals
         self.calculator = PortfolioCalculator(
             people: people.map(\.info),
             locations: locations.map(\.info),
@@ -36,6 +41,16 @@ struct Ledger {
 
     func transaction(_ id: UUID) -> TransactionRecord? {
         transactions.first { $0.id == id }
+    }
+
+    /// Aktarımın iki ayağı.
+    func transferLegs(_ transferID: UUID) -> (out: TransactionRecord?, in: TransactionRecord?) {
+        let legs = transactions.filter { $0.transferID == transferID }
+        return (legs.first { $0.kind == .transferOut }, legs.first { $0.kind == .transferIn })
+    }
+
+    func payments(for debt: Debt) -> [DebtPayment] {
+        payments.filter { $0.debtID == debt.id }.sorted { $0.date > $1.date }
     }
 
     func personName(_ id: UUID) -> String {

@@ -105,6 +105,7 @@ final class TransactionRecord {
     var date: Date = Date.now
     var note: String = ""
     var createdAt: Date = Date.now
+    var transferID: UUID?
 
     init(info: TransactionInfo, note: String) {
         self.id = info.id
@@ -117,6 +118,7 @@ final class TransactionRecord {
         self.date = info.date
         self.note = note
         self.createdAt = info.createdAt
+        self.transferID = info.transferID
     }
 
     var kind: TransactionKind { TransactionKind(rawValue: kindRaw) ?? .buy }
@@ -126,7 +128,7 @@ final class TransactionRecord {
     var info: TransactionInfo {
         TransactionInfo(
             id: id, kind: kind, personID: personID, assetID: assetID, locationID: locationID,
-            quantity: quantity, unitPrice: unitPrice, date: date, createdAt: createdAt
+            quantity: quantity, unitPrice: unitPrice, date: date, createdAt: createdAt, transferID: transferID
         )
     }
 
@@ -138,6 +140,7 @@ final class TransactionRecord {
         quantityText = info.quantity.storageText
         unitPriceText = info.unitPrice.storageText
         date = info.date
+        transferID = info.transferID
         self.note = note
     }
 }
@@ -154,10 +157,13 @@ final class Debt {
     var dueDate: Date?
     var note: String = ""
     var updatedAt: Date = Date.now
+    /// Kredi taksitinin her ay ödendiği gün (1–31); hatırlatma için.
+    var paymentDay: Int?
 
     init(
         id: UUID = UUID(), personID: UUID, institution: String, kind: DebtKind, title: String,
-        remaining: Decimal, monthlyInstallment: Decimal?, dueDate: Date?, note: String, updatedAt: Date = .now
+        remaining: Decimal, monthlyInstallment: Decimal?, dueDate: Date?, note: String, updatedAt: Date = .now,
+        paymentDay: Int? = nil
     ) {
         self.id = id
         self.personID = personID
@@ -169,6 +175,7 @@ final class Debt {
         self.dueDate = dueDate
         self.note = note
         self.updatedAt = updatedAt
+        self.paymentDay = paymentDay
     }
 
     var kind: DebtKind {

@@ -400,6 +400,7 @@ struct BackupMergeTests {
     func mergeMatchesByNameAndIsIdempotent() throws {
         let container = try ModelContainer(
             for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self,
+            DebtPayment.self, Goal.self, JournalEntry.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         let context = container.mainContext
@@ -530,5 +531,138 @@ struct QuoteTests {
     func fundsAreManual() {
         #expect(QuoteKey.key(for: AssetInfo(id: UUID(), name: "Örnek Fon", unit: .lira, category: .fund)) == nil)
         #expect(QuoteKey.key(for: Fixture.lira) == nil)
+    }
+}
+
+@Suite("Aktarım")
+struct TransferTests {
+    private func transfer(_ quantity: String, at price: String, from: LocationInfo, to: LocationInfo, day: Int, id: UUID = UUID()) -> [TransactionInfo] {
+        let date = Fixture.day(day)
+        return [
+            TransactionInfo(id: UUID(), kind: .transferOut, personID: Fixture.me.id, assetID: Fixture.gram.id, locationID: from.id,
+                            quantity: d(quantity), unitPrice: d(price), date: date, createdAt: date, transferID: id),
+            TransactionInfo(id: UUID(), kind: .transferIn, personID: Fixture.me.id, assetID: Fixture.gram.id, locationID: to.id,
+                            quantity: d(quantity), unitPrice: d(price), date: date, createdAt: date.addingTimeInterval(0.001), transferID: id),
+        ]
+    }
+
+    @Test("Aktarım ortalama maliyeti taşır, kâr/zarar ve alım-satım akışı doğurmaz")
+    func transferCarriesCost() {
+        let calculator = Fixture.calculator(
+            [Fixture.tx(.buy, Fixture.gram, "10", at: "2000", day: 0), Fixture.tx(.buy, Fixture.gram, "10", at: "3000", day: 1)]
+                + transfer("4", at: "0", from: Fixture.home, to: Fixture.bank, day: 2),
+            prices: [Fixture.gram.id: "3000"]
+        )
+        let byLocation = Dictionary(uniqueKeysWithValues: calculator.holdings().map { ($0.key.locationID, $0) })
+        #expect(byLocation[Fixture.home.id]?.quantity == 16)
+        #expect(byLocation[Fixture.home.id]?.cost == 40000)
+        #expect(byLocation[Fixture.bank.id]?.quantity == 4)
+        #expect(byLocation[Fixture.bank.id]?.cost == 10000)
+        #expect(calculator.realizedGains().isEmpty)
+        #expect(calculator.summary().cost == 50000)
+        #expect(calculator.monthlyFlows(last: 1, now: Fixture.day(2)).first?.sold == 0)
+    }
+
+    @Test("Eldekinden fazla aktarım ve sonraki aktarımı bozan silme reddedilir")
+    func transferValidation() {
+        let buyID = UUID()
+        let base = [Fixture.tx(.buy, Fixture.gram, "5", at: "2000", day: 0, id: buyID)]
+        let calculator = Fixture.calculator(base)
+        #expect(calculator.validate(transfer("6", at: "2000", from: Fixture.home, to: Fixture.bank, day: 1)) == .insufficientQuantity(available: 5))
+        #expect(calculator.validate(transfer("5", at: "2000", from: Fixture.home, to: Fixture.bank, day: 1)) == nil)
+
+        let moved = Fixture.calculator(base + transfer("5", at: "2000", from: Fixture.home, to: Fixture.bank, day: 1))
+        #expect(moved.validateDeletion(of: buyID) == .breaksLaterSale(date: Fixture.day(1)))
+        #expect(moved.averageCost(before: Fixture.tx(.sell, Fixture.gram, "1", at: "0", location: Fixture.bank, day: 2)) == 2000)
+    }
+}
+
+@Suite("Dolar/altın karşılığı ve piyasa değişimi")
+struct DenominationTests {
+    @Test("Değer geçmişi dolar cinsinden ifade edilir")
+    func convertsToDollars() {
+        let calculator = PortfolioCalculator(
+            assets: [Fixture.lira, Fixture.dollar],
+            prices: [
+                PriceInfo(assetID: Fixture.dollar.id, price: 40, date: Fixture.day(0)),
+                PriceInfo(assetID: Fixture.dollar.id, price: 50, date: Fixture.day(10)),
+            ],
+            transactions: [Fixture.tx(.buy, Fixture.lira, "100000", at: "1", day: 0)]
+        )
+        // Elde dolar olmadığı için noktalar başlangıç ve bugündür; her nokta o günkü kurla çevrilir.
+        let converted = calculator.converted(calculator.valueHistory(now: Fixture.day(20)), into: Fixture.dollar.id)
+        #expect(converted.map(\.value) == [2500, 2000])
+    }
+
+    @Test("Piyasa değişimi kayıtlı fiyatlardan hesaplanır, öncesinde kayıt yoksa yoktur")
+    func marketChange() {
+        let calculator = PortfolioCalculator(
+            assets: [Fixture.gram],
+            prices: [
+                PriceInfo(assetID: Fixture.gram.id, price: 3000, date: Fixture.day(0)),
+                PriceInfo(assetID: Fixture.gram.id, price: 3300, date: Fixture.day(30)),
+            ]
+        )
+        #expect(calculator.marketChange(of: Fixture.gram.id, since: Fixture.day(5)) == d("0.1"))
+        #expect(calculator.marketChange(of: Fixture.gram.id, since: Fixture.start.addingTimeInterval(-86_400)) == nil)
+    }
+}
+
+@Suite("Hedefler ve borç planı")
+struct GoalAndDebtTests {
+    @Test("Miktar hedefi ilerlemesi ve tahmini tarih")
+    func quantityGoal() throws {
+        let calculator = Fixture.calculator([
+            Fixture.tx(.buy, Fixture.gram, "10", at: "2000", day: 0),
+            Fixture.tx(.buy, Fixture.gram, "10", at: "2000", day: 100),
+        ])
+        let goal = GoalInfo(id: UUID(), title: "100 gr", kind: .quantity, target: 100, assetID: Fixture.gram.id, personID: nil)
+        let progress = calculator.progress(of: goal, now: Fixture.day(120), lookbackDays: 90)
+        #expect(progress.current == 20)
+        #expect(progress.ratio == d("0.2"))
+        #expect(!progress.isReached)
+        let estimate = try #require(progress.estimatedDate)
+        // 90 günde 10 gr → kalan 80 gr için 720 gün.
+        #expect(abs(estimate.timeIntervalSince(Fixture.day(120)) - 720 * 86_400) < 1)
+    }
+
+    @Test("Net varlık hedefi borçları düşer")
+    func netWorthGoal() {
+        let debts = [DebtInfo(id: UUID(), personID: Fixture.me.id, kind: .loan, remaining: 5000, monthlyInstallment: 1000)]
+        let calculator = Fixture.calculator([Fixture.tx(.buy, Fixture.lira, "20000", at: "1")], debts: debts)
+        let goal = GoalInfo(id: UUID(), title: "Net", kind: .netWorth, target: 30000, assetID: nil, personID: Fixture.me.id)
+        let progress = calculator.progress(of: goal, now: Fixture.day(30))
+        #expect(progress.current == 15000)
+        #expect(progress.ratio == d("0.5"))
+    }
+
+    @Test("Borcun aylık taksitle biteceği ay")
+    func debtPayoff() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let plan = try #require(DebtPlan.payoff(remaining: 10500, monthly: 1000, from: Fixture.start, calendar: calendar))
+        #expect(plan.months == 11)
+        #expect(calendar.component(.month, from: plan.date) == 12)
+        #expect(DebtPlan.payoff(remaining: 1000, monthly: nil) == nil)
+    }
+}
+
+@Suite("Dışa aktarma ve gizleme")
+struct ExportAndPrivacyTests {
+    @Test("CSV alanları noktalı virgül ve tırnaklara göre kaçışlanır")
+    func csvEscaping() {
+        let text = CSVExporter.csv([["Tarih", "Not"], ["01.01.2026", "Kuyumcu; 2 adet \"yeni\""]])
+        #expect(text.hasPrefix("\u{FEFF}Tarih;Not\r\n"))
+        #expect(text.contains("01.01.2026;\"Kuyumcu; 2 adet \"\"yeni\"\"\"\r\n"))
+    }
+
+    @Test("Tutarları gizle para ve miktarı maskeler, yüzdeyi bırakır")
+    func masksAmounts() {
+        Format.hidesAmounts = true
+        defer { Format.hidesAmounts = false }
+        #expect(Format.lira(1234) == "₺••••")
+        #expect(Format.quantity(12, unit: .gram) == "•••• gr")
+        #expect(Format.plainLira(d("1234.5")) == "₺1.234,50")
+        #expect(Format.percent(d("0.5")) == "%50")
     }
 }

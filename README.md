@@ -57,16 +57,21 @@
 - **Average-cost accounting:** balances are never stored; they are always derived from transactions (person × product × location). A sale removes cost at the average cost. The app rejects selling more than you hold, and edits or deletions that would leave a later sale uncovered.
 - **Analytics:**
   - value vs. cost history; tap the chart to see any date
+  - the same history in lira, US dollars or grams of gold, to see real growth beyond inflation
   - category share over time
   - monthly buys and sells
-  - per-product return on your own cost
+  - per-product return on your own cost, shown apart from the product's market price change
   - realized profit/loss
   - key metrics such as debt-to-assets ratio and monthly installments
+  - a one-page monthly PDF report to share or save
 - **Where are my assets?:** contents, totals and share per bank, brokerage or physical location.
-- **Live prices:** Grand Bazaar (Kapalıçarşı) bid prices for gold coins, bracelets and silver; central bank (TCMB) rates for USD and EUR. Prices can always be entered by hand.
-- **Debts:** loans, credit cards and others; grouped by institution with per-type subtotals and total monthly installments.
-- **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher.
-- **Backups:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac.
+- **Transfers:** move holdings between locations (e.g. from a safe to a bank account) without a fake sale; the cost basis moves with them.
+- **Goals:** net worth or product quantity targets (e.g. 100 g of gold) with progress and an estimated date based on the last 3 months.
+- **Live prices:** Grand Bazaar (Kapalıçarşı) bid prices for gold coins, bracelets and silver; central bank (TCMB) rates for USD and EUR, each with its 1-month change. Prices can always be entered by hand.
+- **Debts:** loans, credit cards and others; grouped by institution with per-type subtotals and total monthly installments. Each debt keeps a payment history and an estimated payoff date, and local notifications remind you of card due dates and installment days.
+- **Undo and history:** every change to transactions, transfers, debts and payments is logged and can be undone, including a quick undo right after a delete.
+- **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher, and an eye button hides all amounts when someone is looking.
+- **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
 - **Native feel:** light and dark mode, Dynamic Type, hand-drawn product icons (bars, coins, bracelets, currency badges).
 
 ### Tech stack
@@ -78,8 +83,9 @@
 | Charts | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Domain logic | Pure Swift `PortfolioCalculator`, independent of SwiftUI and unit tested |
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
+| System | UserNotifications (local reminders), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 33 tests in 10 suites |
+| Tests | Swift Testing: 42 tests in 14 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -88,7 +94,7 @@
 ```mermaid
 flowchart LR
     subgraph Device["iPhone"]
-        SD[("SwiftData<br/>people · locations · products · prices · transactions · debts")]
+        SD[("SwiftData<br/>people · locations · products · prices · transactions · debts · payments · goals · history")]
         L["Ledger<br/>(snapshot)"]
         PC["PortfolioCalculator<br/>pure domain logic"]
         UI["SwiftUI screens<br/>Summary · Transactions · Debts · Prices · Settings · Analytics"]
@@ -110,11 +116,12 @@ flowchart LR
 
 Views read a `Ledger` value, built from SwiftData queries, from the environment. All of the following lives in `PortfolioCalculator`, which knows nothing about SwiftUI:
 
-- average-cost balances and sale validation
+- average-cost balances, transfers and sale validation
 - grouping and missing prices
 - the person filter
 - value history and realized profit/loss
 - monthly flows and the location breakdown
+- values in dollars or gold, goal progress and debt payoff estimates
 
 ### Project structure
 
@@ -122,7 +129,7 @@ Views read a `Ledger` value, built from SwiftData queries, from the environment.
 BirikimDefteri/
 ├── App/             App entry, root view, Face ID lock
 ├── Core/            Pure layer: types, PortfolioCalculator, tr_TR formatting, price parsing
-├── Models/          SwiftData models, Ledger, JSON backup, price updater, auto backup, demo data
+├── Models/          SwiftData models, Ledger, change journal, JSON backup, CSV export, reminders, price updater, auto backup, demo data
 ├── Views/           Summary, Transactions, Debts, Prices, Settings, Analytics; icons and theme
 └── Assets.xcassets  App icon, logo, colors
 BirikimDefteriTests/ Swift Testing unit tests
@@ -222,16 +229,21 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 - **Ortalama maliyet yöntemi:** bakiyeler hiçbir yerde saklanmaz; her zaman işlemlerden hesaplanır (kişi × ürün × yer). Satış, ortalama maliyetten düşer. Eldekinden fazla satış ve sonraki bir satışı karşılıksız bırakan düzenleme ya da silme engellenir.
 - **Analiz:**
   - değer ve maliyet geçmişi; grafiğe dokunup herhangi bir günü görebilirsiniz
+  - aynı geçmiş TL, dolar ya da gram altın cinsinden; enflasyonun ötesindeki gerçek büyümeyi görmek için
   - türlerin zaman içindeki payı
   - aylık alım ve satım
-  - alış maliyetine göre ürün getirisi
+  - alış maliyetine göre ürün getirisi, ürünün piyasa fiyatındaki değişimden ayrı olarak
   - gerçekleşen kâr/zarar
   - borç/varlık oranı ve aylık taksit gibi temel göstergeler
+  - paylaşılabilir, tek sayfalık aylık PDF rapor
 - **Varlıklarım nerede?:** banka, aracı kurum ve fiziki yer başına içerik, toplam ve pay.
-- **Güncel fiyatlar:** altın çeşitleri, bilezik ve gümüş için Kapalıçarşı alış fiyatı, dolar ve euro için TCMB kuru. Fiyatlar her zaman elle de girilebilir.
-- **Borçlar:** kredi, kredi kartı ve diğer; kuruma göre gruplama, türe göre ara toplamlar, aylık taksit toplamı.
-- **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir.
-- **Yedek:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir.
+- **Aktarım:** varlığı bir yerden ötekine (ör. kasadan banka hesabına) sahte alım-satım yapmadan taşıma; maliyet de birlikte taşınır.
+- **Hedefler:** net varlık ya da ürün miktarı hedefi (ör. 100 gr altın); ilerleme ve son 3 aydaki hıza göre tahmini tarih.
+- **Güncel fiyatlar:** altın çeşitleri, bilezik ve gümüş için Kapalıçarşı alış fiyatı, dolar ve euro için TCMB kuru; her birinin 1 aylık değişimiyle. Fiyatlar her zaman elle de girilebilir.
+- **Borçlar:** kredi, kredi kartı ve diğer; kuruma göre gruplama, türe göre ara toplamlar, aylık taksit toplamı. Her borcun ödeme geçmişi ve tahmini bitiş tarihi tutulur; kart son ödeme ve taksit günleri yerel bildirimle hatırlatılır.
+- **Geri al ve işlem geçmişi:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir; silme sonrasında hızlı geri al da var.
+- **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir; göz düğmesiyle yanınızda biri varken bütün tutarlar gizlenir.
+- **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
 - **Yerel his:** açık ve koyu mod, Dynamic Type; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
 
 ### Teknoloji
@@ -243,8 +255,9 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 | Grafikler | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Hesaplama | Saf Swift `PortfolioCalculator`; SwiftUI'dan bağımsız, birim testli |
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
+| Sistem | UserNotifications (yerel hatırlatmalar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 33 test, 10 grup |
+| Test | Swift Testing: 42 test, 14 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -253,7 +266,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 ```mermaid
 flowchart LR
     subgraph Cihaz["iPhone"]
-        SD[("SwiftData<br/>kişi · yer · ürün · fiyat · işlem · borç")]
+        SD[("SwiftData<br/>kişi · yer · ürün · fiyat · işlem · borç · ödeme · hedef · geçmiş")]
         L["Ledger<br/>(anlık görüntü)"]
         PC["PortfolioCalculator<br/>saf hesaplama"]
         UI["SwiftUI ekranları<br/>Özet · Kayıtlar · Borçlar · Fiyatlar · Ayarlar · Analiz"]
@@ -275,11 +288,12 @@ flowchart LR
 
 Görünümler, SwiftData sorgularından kurulan `Ledger` değerini ortamdan (environment) okur. Aşağıdakilerin hepsi SwiftUI'ı hiç bilmeyen `PortfolioCalculator` içindedir:
 
-- ortalama maliyetli bakiyeler ve satış doğrulama
+- ortalama maliyetli bakiyeler, aktarımlar ve satış doğrulama
 - gruplama ve eksik fiyat
 - kişi filtresi
 - değer geçmişi ve gerçekleşen kâr/zarar
 - aylık akış ve yer dökümü
+- dolar ya da altın cinsinden değer, hedef ilerlemesi ve borç bitiş tahmini
 
 ### Proje yapısı
 
@@ -287,7 +301,7 @@ Görünümler, SwiftData sorgularından kurulan `Ledger` değerini ortamdan (env
 BirikimDefteri/
 ├── App/             Uygulama girişi, kök görünüm, Face ID kilidi
 ├── Core/            Saf katman: tipler, PortfolioCalculator, biçimlendirme (tr_TR), fiyat ayrıştırma
-├── Models/          SwiftData modelleri, Ledger, yedek (JSON), fiyat güncelleyici, otomatik yedek, örnek veri
+├── Models/          SwiftData modelleri, Ledger, değişiklik günlüğü, yedek (JSON), CSV dışa aktarma, hatırlatmalar, fiyat güncelleyici, otomatik yedek, örnek veri
 ├── Views/           Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz; simgeler ve tema
 └── Assets.xcassets  Uygulama simgesi, logo, renkler
 BirikimDefteriTests/ Swift Testing birim testleri

@@ -14,6 +14,9 @@ extension Store {
         for object in (try? context.fetch(FetchDescriptor<Asset>())) ?? [] { context.delete(object) }
         for object in (try? context.fetch(FetchDescriptor<Location>())) ?? [] { context.delete(object) }
         for object in (try? context.fetch(FetchDescriptor<Person>())) ?? [] { context.delete(object) }
+        for object in (try? context.fetch(FetchDescriptor<DebtPayment>())) ?? [] { context.delete(object) }
+        for object in (try? context.fetch(FetchDescriptor<Goal>())) ?? [] { context.delete(object) }
+        for object in (try? context.fetch(FetchDescriptor<JournalEntry>())) ?? [] { context.delete(object) }
         try? context.save()
         seedIfNeeded(in: context)
 
@@ -95,12 +98,31 @@ extension Store {
         add(.sell, "Gram gümüş", 100, month: 15, day: 11)
         add(.buy, "Yarım altın", 1, month: 16, day: 7, person: partner)
 
+        if let gram = asset("Gram altın") {
+            let moveDate = calendar.startOfDay(for: monthStart(14).addingTimeInterval(19 * 86_400))
+            let moveID = UUID()
+            createdAt = max(createdAt, moveDate).addingTimeInterval(60)
+            for (kind, location, offset) in [(TransactionKind.transferOut, home, 0.0), (.transferIn, bank, 0.001)] {
+                let info = TransactionInfo(
+                    id: UUID(), kind: kind, personID: me.id, assetID: gram.id, locationID: location.id, quantity: 5,
+                    unitPrice: price("Gram altın", 14), date: moveDate, createdAt: createdAt.addingTimeInterval(offset), transferID: moveID
+                )
+                context.insert(TransactionRecord(info: info, note: "Banka hesabına taşındı"))
+            }
+            context.insert(Goal(title: "100 gr altın", kind: .quantity, target: 100, assetID: gram.id, personID: me.id))
+        }
+        context.insert(Goal(title: "Net varlık hedefi", kind: .netWorth, target: 500_000, assetID: nil, personID: nil))
+
         let nextMonth = calendar.date(byAdding: .month, value: 1, to: thisMonth) ?? thisMonth
-        context.insert(Debt(
+        let loan = Debt(
             personID: me.id, institution: "Ziraat Bankası", kind: .loan, title: "İhtiyaç kredisi",
             remaining: 85_400, monthlyInstallment: 6_250,
-            dueDate: calendar.date(byAdding: .month, value: 22, to: thisMonth), note: ""
-        ))
+            dueDate: calendar.date(byAdding: .month, value: 22, to: thisMonth), note: "", paymentDay: 5
+        )
+        context.insert(loan)
+        for month in [15, 16] {
+            context.insert(DebtPayment(debtID: loan.id, amount: 6_250, date: monthStart(month).addingTimeInterval(4 * 86_400)))
+        }
         context.insert(Debt(
             personID: me.id, institution: "Garanti BBVA", kind: .creditCard, title: "Bonus",
             remaining: Decimal(string: "12430.75") ?? 0, monthlyInstallment: nil,

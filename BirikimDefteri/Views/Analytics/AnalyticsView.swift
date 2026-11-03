@@ -5,6 +5,23 @@ struct AnalyticsView: View {
 
     @Environment(\.ledger) private var ledger
     @State private var period: Period = .year
+    @State private var denomination: Denomination = .lira
+    @State private var isShowingReport = false
+
+    /// Değer grafiğinin birimi: TL, dolar ya da gram altın karşılığı.
+    enum Denomination: String, CaseIterable, Identifiable {
+        case lira, usd, gold
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .lira: "₺"
+            case .usd: "$"
+            case .gold: "Gram altın"
+            }
+        }
+    }
 
     enum Period: String, CaseIterable, Identifiable {
         case threeMonths, sixMonths, year, all
@@ -57,13 +74,31 @@ struct AnalyticsView: View {
                         ForEach(Period.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    PeriodChangeHeader(points: history)
-                    ValueHistoryChart(points: history)
-                        .padding(.vertical, 4)
+                    Picker("Birim", selection: $denomination) {
+                        ForEach(Denomination.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if denomination == .lira {
+                        PeriodChangeHeader(points: history)
+                        ValueHistoryChart(points: history)
+                            .padding(.vertical, 4)
+                    } else if let unitAsset = unitAsset(for: denomination, in: calculator) {
+                        let converted = calculator.converted(history, into: unitAsset.id)
+                        ConvertedChangeHeader(points: converted, unit: unitAsset.unit, label: denomination == .usd ? "dolar" : "gram altın")
+                        ConvertedHistoryChart(points: converted, unit: unitAsset.unit)
+                            .padding(.vertical, 4)
+                    } else {
+                        Text(denomination == .usd ? "Dolar ürünü bulunamadı." : "Gram altın ürünü bulunamadı.")
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
-                    Text("Değer ve maliyet")
+                    Text(denomination == .lira ? "Değer ve maliyet" : "Değer (\(denomination == .usd ? "dolar" : "gram altın") karşılığı)")
                 } footer: {
-                    Text("Geçmiş değerler, o tarihteki son fiyat kaydıyla hesaplanır; ilk kayıttan önceki dönem için işlem fiyatı kullanılır.")
+                    if denomination == .lira {
+                        Text("Geçmiş değerler, o tarihteki son fiyat kaydıyla hesaplanır; ilk kayıttan önceki dönem için işlem fiyatı kullanılır.")
+                    } else {
+                        Text("Varlıklarınızın her tarihteki \(denomination == .usd ? "dolar" : "gram altın") karşılığı. TL değer artarken bu çizgi düşüyorsa birikiminiz \(denomination == .usd ? "dolar" : "altın") karşısında eriyor demektir. Yeni alımlar da dahildir.")
+                    }
                 }
 
                 Section("Temel göstergeler") {
@@ -126,6 +161,25 @@ struct AnalyticsView: View {
         }
         .navigationTitle("Analiz")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button {
+                isShowingReport = true
+            } label: {
+                Label("Aylık rapor", systemImage: "doc.richtext")
+            }
+        }
+        .sheet(isPresented: $isShowingReport) {
+            MonthlyReportSheet(filter: filter)
+        }
+    }
+
+    private func unitAsset(for denomination: Denomination, in calculator: PortfolioCalculator) -> AssetInfo? {
+        let assets = calculator.assets.values.sorted { $0.sortOrder < $1.sortOrder }
+        switch denomination {
+        case .lira: return nil
+        case .usd: return assets.first { $0.unit == .usd }
+        case .gold: return assets.first { QuoteKey.key(for: $0) == .gramGold }
+        }
     }
 }
 

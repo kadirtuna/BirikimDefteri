@@ -7,6 +7,7 @@ struct GroupDetailView: View {
     @Environment(\.ledger) private var ledger
     @Environment(AppRouter.self) private var router
     @State private var editing: TransactionRecord?
+    @State private var editingTransfer: TransferRef?
 
     var body: some View {
         let calculator = ledger.calculator
@@ -63,7 +64,11 @@ struct GroupDetailView: View {
                 }
                 ForEach(detail.transactions) { transaction in
                     Button {
-                        editing = ledger.transaction(transaction.id)
+                        if let transferID = transaction.transferID {
+                            editingTransfer = TransferRef(id: transferID)
+                        } else {
+                            editing = ledger.transaction(transaction.id)
+                        }
                     } label: {
                         TransactionRow(info: transaction, note: ledger.transaction(transaction.id)?.note)
                     }
@@ -74,6 +79,9 @@ struct GroupDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { record in
             TransactionFormView(record: record)
+        }
+        .sheet(item: $editingTransfer) { reference in
+            TransferFormView(transferID: reference.id)
         }
     }
 
@@ -96,6 +104,9 @@ struct GroupDetailView: View {
             }
         }
         LabeledContent("Toplam maliyet", value: Format.lira(detail.totalCost))
+        if asset.unit != .lira {
+            MarketChangeRow(assetID: asset.id)
+        }
         if detail.hasPrice {
             LabeledContent("Kâr/Zarar") {
                 ProfitText(profit: detail.profit, ratio: detail.profitRatio)

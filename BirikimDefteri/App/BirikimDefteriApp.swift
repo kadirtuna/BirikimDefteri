@@ -8,7 +8,8 @@ struct BirikimDefteriApp: App {
     init() {
         do {
             container = try ModelContainer(
-                for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self
+                for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self,
+                DebtPayment.self, Goal.self, JournalEntry.self
             )
         } catch {
             fatalError("Veri deposu açılamadı: \(error)")
@@ -18,6 +19,7 @@ struct BirikimDefteriApp: App {
         #endif
         Store.seedIfNeeded(in: container.mainContext)
         Store.mergePendingImport(in: container.mainContext)
+        Format.hidesAmounts = UserDefaults.standard.bool(forKey: AmountPrivacy.key)
     }
 
     var body: some Scene {

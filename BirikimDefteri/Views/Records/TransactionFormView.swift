@@ -45,7 +45,7 @@ struct TransactionFormView: View {
             Form {
                 Section {
                     Picker("İşlem türü", selection: $kind) {
-                        ForEach(TransactionKind.allCases) { Text($0.title).tag($0) }
+                        ForEach(TransactionKind.tradeKinds) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                 }
@@ -236,10 +236,15 @@ struct TransactionFormView: View {
 
     private func save() {
         guard let draft, problem == nil else { return }
+        let summary = Journal.describe(draft, ledger: ledger)
         if let record {
+            let before = [Journal.entry(record)]
             record.update(from: draft, note: note.trimmed)
+            Journal.recordTransactions(.edited, summary: summary, before: before, after: [record], in: context)
         } else {
-            context.insert(TransactionRecord(info: draft, note: note.trimmed))
+            let record = TransactionRecord(info: draft, note: note.trimmed)
+            context.insert(record)
+            Journal.recordTransactions(.added, summary: summary, before: [TransactionRecord](), after: [record], in: context)
         }
         try? context.save()
         dismiss()
@@ -256,6 +261,7 @@ struct TransactionFormView: View {
 
     private func delete() {
         guard let record else { return }
+        Journal.recordTransactions(.deleted, summary: Journal.describe(record.info, ledger: ledger), before: [record], after: [], in: context)
         context.delete(record)
         try? context.save()
         dismiss()

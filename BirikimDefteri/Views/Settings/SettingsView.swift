@@ -5,6 +5,11 @@ struct SettingsView: View {
     @Environment(\.ledger) private var ledger
     @Environment(\.modelContext) private var context
     @AppStorage(PriceUpdater.autoUpdateKey) private var autoUpdatePrices = true
+    @AppStorage(AmountPrivacy.key) private var hidesAmounts = false
+    @AppStorage(PaymentReminders.enabledKey) private var remindersEnabled = false
+    @State private var csvExport: CSVDocument?
+    @State private var csvName = ""
+    @State private var isExportingCSV = false
 
     @State private var exportDocument: BackupDocument?
     @State private var isExporting = false
@@ -53,6 +58,39 @@ struct SettingsView: View {
                         LabeledContent { Text("\(ledger.assets.count)") } label: {
                             Label("Ürünler", systemImage: "square.stack.3d.up")
                         }
+                    }
+                    NavigationLink {
+                        GoalsView()
+                    } label: {
+                        LabeledContent { Text("\(ledger.goals.count)") } label: {
+                            Label("Hedefler", systemImage: "target")
+                        }
+                    }
+                    NavigationLink {
+                        JournalView()
+                    } label: {
+                        Label("İşlem geçmişi", systemImage: "clock.arrow.circlepath")
+                    }
+                }
+
+                Section {
+                    ForEach(CSVExporter.Kind.allCases) { kind in
+                        Button {
+                            csvExport = CSVDocument(text: CSVExporter.make(kind, from: ledger))
+                            csvName = "BirikimDefteri-\(kind.filename)-\(Date.now.formatted(.iso8601.year().month().day()))"
+                            isExportingCSV = true
+                        } label: {
+                            Label("\(kind.title) (CSV)", systemImage: "tablecells")
+                        }
+                    }
+                } header: {
+                    Text("Excel'e aktar")
+                } footer: {
+                    Text("Dosyalar Excel'de doğrudan açılır: noktalı virgülle ayrılmış, ondalıklar virgüllü.")
+                }
+                .fileExporter(isPresented: $isExportingCSV, document: csvExport, contentType: .commaSeparatedText, defaultFilename: csvName) { result in
+                    if case .failure(let error) = result {
+                        notice = Notice(title: "Dosya kaydedilemedi", message: error.localizedDescription)
                     }
                 }
 
@@ -103,6 +141,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle(isOn: Binding(get: { hidesAmounts }, set: { AmountPrivacy.set($0) })) {
+                        Label("Tutarları gizle", systemImage: "eye.slash")
+                    }
                     LabeledContent {
                         Text(AppLock.isAvailable ? "Her zaman açık" : "Çalışmıyor")
                             .foregroundStyle(AppLock.isAvailable ? Color.secondary : Color.orange)
@@ -113,10 +154,20 @@ struct SettingsView: View {
                     Text("Güvenlik")
                 } footer: {
                     if AppLock.isAvailable {
-                        Text("Uygulama her açılışta ve arka plandan her dönüşte kimlik doğrulaması ister. \(AppLock.biometryName) olmazsa cihaz şifresi kullanılabilir.")
+                        Text("Tutarları gizle açıkken bütün rakamlar •••• olarak görünür; Özet'teki göz simgesiyle de açıp kapatabilirsiniz. Uygulama her açılışta ve arka plandan her dönüşte kimlik doğrulaması ister; \(AppLock.biometryName) olmazsa cihaz şifresi kullanılabilir.")
                     } else {
                         Text("Bu iPhone'da cihaz şifresi ayarlı olmadığı için kilit çalışamıyor. iPhone Ayarlar > Face ID ve Parola'dan bir şifre belirleyin.")
                     }
+                }
+
+                Section {
+                    Toggle(isOn: Binding(get: { remindersEnabled }, set: setReminders)) {
+                        Label("Ödeme hatırlatmaları", systemImage: "bell.badge")
+                    }
+                } header: {
+                    Text("Bildirimler")
+                } footer: {
+                    Text("Kredi kartında son ödemeden 2 gün önce ve o gün, kredide her ay taksit gününde saat 09:00'da hatırlatır. Taksit günü borcun düzenleme ekranından seçilir.")
                 }
 
                 Section {
@@ -140,6 +191,25 @@ struct SettingsView: View {
                 Button("Tamam", role: .cancel) {}
             } message: { notice in
                 Text(notice.message)
+            }
+        }
+    }
+
+    private func setReminders(_ enabled: Bool) {
+        guard enabled else {
+            remindersEnabled = false
+            Task { await PaymentReminders.reschedule(ledger.debts) }
+            return
+        }
+        Task {
+            if await PaymentReminders.requestAuthorization() {
+                remindersEnabled = true
+                await PaymentReminders.reschedule(ledger.debts)
+            } else {
+                notice = Notice(
+                    title: "Bildirim izni yok",
+                    message: "iPhone Ayarlar > Uygulamalar > Birikim Defteri > Bildirimler'den izin verip yeniden deneyin."
+                )
             }
         }
     }

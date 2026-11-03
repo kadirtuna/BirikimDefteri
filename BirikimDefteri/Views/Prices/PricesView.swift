@@ -33,6 +33,7 @@ struct PricesView: View {
                             asset: asset,
                             latest: ledger.calculator.latestPrices[asset.id],
                             isAutomatic: QuoteKey.key(for: asset.info) != nil,
+                            monthChange: ledger.calculator.marketChange(of: asset.id, since: Date.now.addingTimeInterval(-30 * 86_400)),
                             state: state(for: asset),
                             text: Binding(
                                 get: { drafts[asset.id] ?? "" },
@@ -124,6 +125,7 @@ private struct PriceRow: View {
     let asset: Asset
     let latest: PriceInfo?
     let isAutomatic: Bool
+    let monthChange: Decimal?
     let state: PriceDraftState
     @Binding var text: String
     @ScaledMetric private var iconSize: CGFloat = 38
@@ -155,7 +157,8 @@ private struct PriceRow: View {
     private var subtitle: String {
         let source = isAutomatic ? " · otomatik" : " · elle"
         guard let latest else { return "1 \(asset.unit.symbol) · Fiyat girilmedi\(source)" }
-        return "1 \(asset.unit.symbol) · \(Format.dateTime(latest.date))\(source)"
+        let change = monthChange.map { " · 1 ayda \(Format.signedPercent($0))" } ?? ""
+        return "1 \(asset.unit.symbol) · \(Format.dateTime(latest.date))\(source)\(change)"
     }
 }
 

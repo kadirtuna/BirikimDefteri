@@ -5,12 +5,21 @@ enum Format {
     static let locale = Locale(identifier: "tr_TR")
     private static let posix = Locale(identifier: "en_US_POSIX")
 
+    /// Açıkken para ve miktarlar •••• olarak gösterilir (Ayarlar > Tutarları gizle). Yüzdeler görünür kalır.
+    static var hidesAmounts = false
+    private static let mask = "••••"
+
     static func lira(_ value: Decimal) -> String {
+        hidesAmounts ? "₺\(mask)" : plainLira(value)
+    }
+
+    /// Gizleme ayarından bağımsız; kalıcı metinler (işlem geçmişi, rapor) için.
+    static func plainLira(_ value: Decimal) -> String {
         value.formatted(.currency(code: "TRY").locale(locale))
     }
 
     static func signedLira(_ value: Decimal) -> String {
-        value.formatted(.currency(code: "TRY").locale(locale).sign(strategy: .always(showZero: false)))
+        hidesAmounts ? mask : value.formatted(.currency(code: "TRY").locale(locale).sign(strategy: .always(showZero: false)))
     }
 
     static func number(_ value: Decimal, maxFractionDigits: Int = 4) -> String {
@@ -19,6 +28,13 @@ enum Format {
 
     /// Miktarı birimiyle yazar: "12,5 gr", "3 adet", "$1.000,00".
     static func quantity(_ value: Decimal, unit: AssetUnit) -> String {
+        guard !hidesAmounts else {
+            return unit.currencyCode == nil ? "\(mask) \(unit.symbol)" : "\(unit.symbol)\(mask)"
+        }
+        return plainQuantity(value, unit: unit)
+    }
+
+    static func plainQuantity(_ value: Decimal, unit: AssetUnit) -> String {
         if let code = unit.currencyCode {
             return value.formatted(.currency(code: code).locale(locale))
         }

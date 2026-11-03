@@ -4,6 +4,7 @@ import SwiftUI
 extension Format {
     /// Eksen etiketleri için kısa para biçimi: ₺12,5 B, ₺1,2 Mn.
     static func compactLira(_ value: Double) -> String {
+        guard !hidesAmounts else { return "₺•••" }
         let magnitude = abs(value)
         let (divisor, suffix): (Double, String) =
             magnitude >= 1e9 ? (1e9, " Mr") : magnitude >= 1e6 ? (1e6, " Mn") : magnitude >= 1e3 ? (1e3, " B") : (1, "")
@@ -264,7 +265,7 @@ struct PriceHistoryChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                     .interpolationMethod(.monotone)
             }
-            ForEach(transactions) { transaction in
+            ForEach(transactions.filter { !$0.kind.isTransfer }) { transaction in
                 PointMark(x: .value("Tarih", transaction.date), y: .value("Fiyat", transaction.unitPrice.doubleValue))
                     .foregroundStyle(by: .value("İşlem", transaction.kind.title))
                     .symbol(by: .value("İşlem", transaction.kind.title))
@@ -290,5 +291,108 @@ struct PriceHistoryChart: View {
         }
         .chartLegend(position: .bottom, alignment: .leading)
         .frame(height: 200)
+    }
+}
+
+/// Dolar ya da gram altın karşılığı değer geçmişi.
+struct ConvertedHistoryChart: View {
+    let points: [ConvertedPoint]
+    let unit: AssetUnit
+
+    var body: some View {
+        Chart(points) { point in
+            AreaMark(x: .value("Tarih", point.date), y: .value("Değer", point.value.doubleValue))
+                .foregroundStyle(LinearGradient(
+                    colors: [Theme.gold.opacity(0.3), Theme.gold.opacity(0.02)],
+                    startPoint: .top, endPoint: .bottom
+                ))
+            LineMark(x: .value("Tarih", point.date), y: .value("Değer", point.value.doubleValue))
+                .foregroundStyle(Theme.gold)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+        }
+        .chartYScale(domain: .automatic(includesZero: false))
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                AxisValueLabel {
+                    if let amount = value.as(Double.self) {
+                        Text(unit == .usd ? Format.compactLira(amount).replacingOccurrences(of: "₺", with: "$") : Format.quantity(Decimal(amount.rounded()), unit: unit))
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                AxisValueLabel {
+                    if let date = value.as(Date.self) { Text(Format.shortMonth(date)) }
+                }
+            }
+        }
+        .frame(height: 220)
+    }
+}
+
+struct ConvertedChangeHeader: View {
+    let points: [ConvertedPoint]
+    let unit: AssetUnit
+    let label: String
+
+    var body: some View {
+        let first = points.first?.value ?? 0
+        let last = points.last?.value ?? 0
+        let ratio: Decimal? = first > 0 ? last / first - 1 : nil
+
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Format.quantity(last, unit: unit))
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .monospacedDigit()
+            if let ratio {
+                Text("\(Format.signedPercent(ratio)) dönem değişimi (\(label) bazında)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ratio >= 0 ? Theme.positive : Theme.negative)
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
+/// Ürünün kaydedilen fiyatlara göre piyasa değişimi: 1 hafta, 1 ay, 3 ay, 1 yıl.
+struct MarketChangeRow: View {
+    let assetID: UUID
+    @Environment(\.ledger) private var ledger
+
+    private static let periods: [(title: String, days: Int)] = [("1H", 7), ("1A", 30), ("3A", 91), ("1Y", 365)]
+
+    var body: some View {
+        let now = Date.now
+        let changes = Self.periods.map { period in
+            (period.title, ledger.calculator.marketChange(of: assetID, since: now.addingTimeInterval(-Double(period.days) * 86_400)))
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Piyasa değişimi")
+            HStack(spacing: 8) {
+                ForEach(changes, id: \.0) { title, change in
+                    VStack(spacing: 2) {
+                        Text(title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(change.map(Format.signedPercent) ?? "—")
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(change.map { $0 >= 0 ? Theme.positive : Theme.negative } ?? Color.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+            if changes.allSatisfy({ $0.1 == nil }) {
+                Text("Uygulamanın kaydettiği fiyatlardan hesaplanır; fiyat geçmişi biriktikçe dolar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

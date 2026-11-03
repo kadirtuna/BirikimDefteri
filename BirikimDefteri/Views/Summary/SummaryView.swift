@@ -7,6 +7,8 @@ struct SummaryView: View {
     @State private var selectedFilter: PersonFilter?
     @State private var grouping: Grouping = .asset
     @State private var isAdding = false
+    @State private var isAddingTransfer = false
+    @AppStorage(AmountPrivacy.key) private var hidesAmounts = false
 
     /// Varsayılan görünüm ilk kişidir ("Ben"); başka bir seçim yapılınca o kalır.
     private var filter: PersonFilter {
@@ -54,6 +56,14 @@ struct SummaryView: View {
                         } label: {
                             LocationsLinkLabel(breakdown: calculator.locationBreakdown(for: filter))
                         }
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        GoalsView()
+                    } label: {
+                        GoalsCard()
                     }
                 }
 
@@ -122,24 +132,27 @@ struct SummaryView: View {
                 GroupDetailView(key: key, filter: filter)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     NavigationLink {
                         AnalyticsView(filter: filter)
                     } label: {
                         Label("Analiz", systemImage: "chart.xyaxis.line")
                     }
+                    Button {
+                        AmountPrivacy.set(!hidesAmounts)
+                    } label: {
+                        Label(hidesAmounts ? "Tutarları göster" : "Tutarları gizle", systemImage: hidesAmounts ? "eye.slash" : "eye")
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isAdding = true
-                    } label: {
-                        Label("Yeni işlem", systemImage: "plus.circle.fill")
-                    }
-                    .tint(Theme.gold)
+                    AddTransactionMenu(isAddingTrade: $isAdding, isAddingTransfer: $isAddingTransfer)
                 }
             }
             .sheet(isPresented: $isAdding) {
                 TransactionFormView()
+            }
+            .sheet(isPresented: $isAddingTransfer) {
+                TransferFormView()
             }
         }
     }

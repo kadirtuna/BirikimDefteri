@@ -173,9 +173,10 @@ struct PortfolioCalculator: Sendable {
         let sorted = transactions.sorted(by: Self.isChronological)
 
         var state: [HoldingKey: Position] = [:]
+        var transfers: [UUID: Decimal] = [:]
         var realized: [RealizedGain] = []
         for transaction in sorted {
-            if let gain = Self.apply(transaction, to: &state) { realized.append(gain) }
+            if let gain = Self.apply(transaction, to: &state, transfers: &transfers) { realized.append(gain) }
         }
 
         self.people = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -317,48 +318,73 @@ struct PortfolioCalculator: Sendable {
 
     /// Önerilen işlemi (yeni ya da aynı kimlikli mevcut işlemin yerine) kontrol eder.
     func validate(_ proposed: TransactionInfo) -> LedgerError? {
-        guard proposed.quantity > 0 else { return .nonPositiveQuantity }
-        guard proposed.unitPrice >= 0 else { return .negativePrice }
+        validate([proposed])
+    }
 
-        var affected: Set<HoldingKey> = [proposed.key]
-        if let original = transactions.first(where: { $0.id == proposed.id }) {
-            affected.insert(original.key)
-        }
-        let candidate = transactions.filter { $0.id != proposed.id } + [proposed]
-        return firstViolation(in: candidate, keys: affected, proposedID: proposed.id)
+    /// Birlikte kaydedilecek işlemleri (ör. aktarımın iki ayağı) aynı anda kontrol eder.
+    func validate(_ proposals: [TransactionInfo]) -> LedgerError? {
+        validateChange(removing: Set(proposals.map(\.id)), adding: proposals)
     }
 
     /// Bir işlemin silinmesinin sonraki satışları bozup bozmadığını kontrol eder.
     func validateDeletion(of id: UUID) -> LedgerError? {
-        guard let original = transactions.first(where: { $0.id == id }) else { return nil }
-        return firstViolation(in: transactions.filter { $0.id != id }, keys: [original.key], proposedID: nil)
+        validateDeletion(of: [id])
+    }
+
+    func validateDeletion(of ids: Set<UUID>) -> LedgerError? {
+        validateChange(removing: ids, adding: [])
+    }
+
+    /// `removing` kimlikli işlemler çıkarılıp `adding` eklendiğinde bakiyelerin eksiye düşüp düşmediği.
+    func validateChange(removing ids: Set<UUID>, adding proposals: [TransactionInfo]) -> LedgerError? {
+        for proposed in proposals {
+            guard proposed.quantity > 0 else { return .nonPositiveQuantity }
+            guard proposed.unitPrice >= 0 else { return .negativePrice }
+        }
+        var affected = Set(proposals.map(\.key))
+        for original in transactions where ids.contains(original.id) {
+            affected.insert(original.key)
+        }
+        guard !affected.isEmpty else { return nil }
+        let candidate = transactions.filter { !ids.contains($0.id) } + proposals
+        return firstViolation(in: candidate, keys: affected, proposedIDs: Set(proposals.map(\.id)))
     }
 
     /// Önerilen işlemden hemen önce, aynı kişi, ürün ve yerdeki miktar.
     func availableQuantity(before proposed: TransactionInfo) -> Decimal {
-        var balance: Decimal = 0
-        for transaction in transactions
-        where transaction.key == proposed.key && transaction.id != proposed.id && Self.isChronological(transaction, proposed) {
-            balance += transaction.kind == .buy ? transaction.quantity : -transaction.quantity
-        }
-        return max(balance, 0)
+        max(position(before: proposed).quantity, 0)
     }
 
-    private func firstViolation(in list: [TransactionInfo], keys: Set<HoldingKey>, proposedID: UUID?) -> LedgerError? {
+    /// Önerilen işlemden hemen önceki ortalama birim maliyet; aktarımda maliyet bununla taşınır.
+    func averageCost(before proposed: TransactionInfo) -> Decimal? {
+        let position = position(before: proposed)
+        return position.quantity > 0 ? position.cost / position.quantity : nil
+    }
+
+    private func position(before proposed: TransactionInfo) -> Position {
+        var state: [HoldingKey: Position] = [:]
+        var transfers: [UUID: Decimal] = [:]
+        for transaction in transactions
+        where transaction.id != proposed.id && Self.isChronological(transaction, proposed) {
+            Self.apply(transaction, to: &state, transfers: &transfers)
+        }
+        return state[proposed.key] ?? Position()
+    }
+
+    private func firstViolation(in list: [TransactionInfo], keys: Set<HoldingKey>, proposedIDs: Set<UUID>) -> LedgerError? {
         var balances: [HoldingKey: Decimal] = [:]
         for transaction in list.sorted(by: Self.isChronological) where keys.contains(transaction.key) {
             let balance = balances[transaction.key, default: 0]
-            switch transaction.kind {
-            case .buy:
+            if transaction.kind.addsQuantity {
                 balances[transaction.key] = balance + transaction.quantity
-            case .sell:
-                if transaction.quantity > balance {
-                    return transaction.id == proposedID
-                        ? .insufficientQuantity(available: balance)
-                        : .breaksLaterSale(date: transaction.date)
-                }
-                balances[transaction.key] = balance - transaction.quantity
+                continue
             }
+            if transaction.quantity > balance {
+                return proposedIDs.contains(transaction.id)
+                    ? .insufficientQuantity(available: balance)
+                    : .breaksLaterSale(date: transaction.date)
+            }
+            balances[transaction.key] = balance - transaction.quantity
         }
         return nil
     }
@@ -377,15 +403,22 @@ struct PortfolioCalculator: Sendable {
     }
 
     /// İşlemi pozisyona ortalama maliyet yöntemiyle uygular. Satışsa gerçekleşen kârı döndürür.
+    /// Aktarımın çıkış ayağı ortalama maliyetle düşer ve maliyetini `transfers`'a bırakır; giriş ayağı onu alır.
     @discardableResult
-    private static func apply(_ transaction: TransactionInfo, to state: inout [HoldingKey: Position]) -> RealizedGain? {
+    private static func apply(
+        _ transaction: TransactionInfo, to state: inout [HoldingKey: Position], transfers: inout [UUID: Decimal]
+    ) -> RealizedGain? {
         var position = state[transaction.key] ?? Position()
         var realized: RealizedGain?
         switch transaction.kind {
         case .buy:
             position.quantity += transaction.quantity
             position.cost += transaction.quantity * transaction.unitPrice
-        case .sell:
+        case .transferIn:
+            position.quantity += transaction.quantity
+            position.cost += transaction.transferID.flatMap { transfers.removeValue(forKey: $0) }
+                ?? transaction.quantity * transaction.unitPrice
+        case .sell, .transferOut:
             let sold = min(transaction.quantity, position.quantity)
             let costBasis: Decimal
             if sold >= position.quantity {
@@ -397,10 +430,14 @@ struct PortfolioCalculator: Sendable {
                 position.cost = remaining
                 position.quantity -= sold
             }
-            realized = RealizedGain(
-                transactionID: transaction.id, date: transaction.date, personID: transaction.personID,
-                assetID: transaction.assetID, quantity: sold, proceeds: sold * transaction.unitPrice, costBasis: costBasis
-            )
+            if transaction.kind == .sell {
+                realized = RealizedGain(
+                    transactionID: transaction.id, date: transaction.date, personID: transaction.personID,
+                    assetID: transaction.assetID, quantity: sold, proceeds: sold * transaction.unitPrice, costBasis: costBasis
+                )
+            } else if let transferID = transaction.transferID {
+                transfers[transferID, default: 0] += costBasis
+            }
         }
         state[transaction.key] = position
         return realized
@@ -478,10 +515,11 @@ extension PortfolioCalculator {
         }
 
         var state: [HoldingKey: Position] = [:]
+        var transfers: [UUID: Decimal] = [:]
         var next = 0
         return dates.sorted().map { date in
             while next < relevant.count, relevant[next].date <= date {
-                Self.apply(relevant[next], to: &state)
+                Self.apply(relevant[next], to: &state, transfers: &transfers)
                 next += 1
             }
             var value: Decimal = 0
@@ -508,10 +546,10 @@ extension PortfolioCalculator {
         for transaction in transactions where filter.includes(transaction.personID) {
             guard let month = calendar.dateInterval(of: .month, for: transaction.date)?.start else { continue }
             var entry = totals[month] ?? (0, 0)
-            if transaction.kind == .buy {
-                entry.bought += transaction.total
-            } else {
-                entry.sold += transaction.total
+            switch transaction.kind {
+            case .buy: entry.bought += transaction.total
+            case .sell: entry.sold += transaction.total
+            case .transferOut, .transferIn: continue
             }
             totals[month] = entry
         }
@@ -565,5 +603,116 @@ extension PortfolioCalculator {
                     ? lhs.value > rhs.value
                     : (lhs.location?.name ?? "").localizedCompare(rhs.location?.name ?? "") == .orderedAscending
             }
+    }
+}
+
+// MARK: - Para birimi karşılığı, piyasa değişimi, hedefler
+
+struct ConvertedPoint: Identifiable, Hashable, Sendable {
+    let date: Date
+    let value: Decimal
+    var id: Date { date }
+}
+
+enum GoalKind: String, Codable, CaseIterable, Identifiable, Sendable {
+    case netWorth, quantity
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .netWorth: "Net varlık"
+        case .quantity: "Ürün miktarı"
+        }
+    }
+}
+
+struct GoalInfo: Identifiable, Hashable, Sendable {
+    let id: UUID
+    var title: String
+    var kind: GoalKind
+    var target: Decimal
+    var assetID: UUID?
+    var personID: UUID?
+}
+
+struct GoalProgress: Hashable, Sendable {
+    let current: Decimal
+    let target: Decimal
+    /// Son dönemdeki hızla hedefe ulaşılacak tahmini tarih; ilerleme yoksa nil.
+    let estimatedDate: Date?
+
+    var ratio: Decimal { target > 0 ? min(max(current / target, 0), 1) : 0 }
+    var isReached: Bool { current >= target }
+}
+
+extension PortfolioCalculator {
+    /// Değer geçmişini başka bir ürün cinsinden (ör. dolar, gram altın) ifade eder.
+    func converted(_ points: [ValuePoint], into assetID: UUID) -> [ConvertedPoint] {
+        points.compactMap { point in
+            guard let price = price(of: assetID, at: point.date), price > 0 else { return nil }
+            return ConvertedPoint(date: point.date, value: point.value / price)
+        }
+    }
+
+    /// Kaydedilen fiyatlara göre ürünün piyasa değişimi. O tarihte ya da öncesinde fiyat kaydı yoksa nil.
+    func marketChange(of assetID: UUID, since date: Date) -> Decimal? {
+        guard let history = priceHistory[assetID], let latest = history.last,
+              let base = Self.last(in: history, atOrBefore: date), base.price > 0, latest.date > base.date
+        else { return nil }
+        return latest.price / base.price - 1
+    }
+
+    /// Bir tarihteki toplam varlık değeri.
+    func assetsValue(at date: Date, for filter: PersonFilter = .everyone) -> Decimal {
+        valueHistory(for: filter, since: date, now: date).first?.value ?? 0
+    }
+
+    /// Bir tarihte bir ürünün toplam miktarı.
+    func quantity(of assetID: UUID, for filter: PersonFilter = .everyone, at date: Date) -> Decimal {
+        var state: [HoldingKey: Position] = [:]
+        var transfers: [UUID: Decimal] = [:]
+        for transaction in transactions where transaction.date <= date {
+            Self.apply(transaction, to: &state, transfers: &transfers)
+        }
+        return state.filter { $0.key.assetID == assetID && filter.includes($0.key.personID) }.values.sum { $0.quantity }
+    }
+
+    /// Hedefin bugünkü durumu; tahmini tarih son `lookbackDays` gündeki ilerleme hızından hesaplanır.
+    func progress(of goal: GoalInfo, now: Date = .now, lookbackDays: Int = 90) -> GoalProgress {
+        let filter = goal.personID.map(PersonFilter.person) ?? .everyone
+        let past = now.addingTimeInterval(-Double(lookbackDays) * 86_400)
+        let current: Decimal
+        let previous: Decimal
+        switch goal.kind {
+        case .netWorth:
+            current = summary(for: filter).netWorth
+            previous = assetsValue(at: past, for: filter) - debtSummary(for: filter).total
+        case .quantity:
+            guard let assetID = goal.assetID else {
+                return GoalProgress(current: 0, target: goal.target, estimatedDate: nil)
+            }
+            current = holdings(for: filter).filter { $0.key.assetID == assetID }.sum(\.quantity)
+            previous = quantity(of: assetID, for: filter, at: past)
+        }
+        var estimate: Date?
+        let gainPerDay = (current - previous) / Decimal(lookbackDays)
+        if current < goal.target, gainPerDay > 0 {
+            let daysLeft = ((goal.target - current) / gainPerDay).doubleValue
+            if daysLeft < 365 * 50 { estimate = now.addingTimeInterval(daysLeft * 86_400) }
+        }
+        return GoalProgress(current: current, target: goal.target, estimatedDate: estimate)
+    }
+}
+
+enum DebtPlan {
+    /// Kalan borcun aylık taksitle kaç ayda biteceği ve tahmini bitiş tarihi.
+    static func payoff(
+        remaining: Decimal, monthly: Decimal?, from date: Date = .now, calendar: Calendar = .current
+    ) -> (months: Int, date: Date)? {
+        guard let monthly, monthly > 0, remaining > 0 else { return nil }
+        let months = Int((remaining / monthly).doubleValue.rounded(.up))
+        guard let end = calendar.date(byAdding: .month, value: months, to: date) else { return nil }
+        return (months, end)
     }
 }

@@ -16,6 +16,8 @@ struct BackupFile: Codable {
     var prices: [PriceEntry]
     var transactions: [TransactionEntry]
     var debts: [DebtEntry]
+    var debtPayments: [DebtPaymentEntry]?
+    var goals: [GoalEntry]?
 
     struct PersonEntry: Codable {
         var id: UUID
@@ -57,6 +59,7 @@ struct BackupFile: Codable {
         var date: Date
         var note: String
         var createdAt: Date
+        var transferID: UUID?
     }
 
     struct DebtEntry: Codable {
@@ -70,6 +73,26 @@ struct BackupFile: Codable {
         var dueDate: Date?
         var note: String
         var updatedAt: Date
+        var paymentDay: Int?
+    }
+
+    struct DebtPaymentEntry: Codable {
+        var id: UUID
+        var debtID: UUID
+        var amount: String
+        var date: Date
+        var note: String
+        var createdAt: Date
+    }
+
+    struct GoalEntry: Codable {
+        var id: UUID
+        var title: String
+        var kind: GoalKind
+        var target: String
+        var assetID: UUID?
+        var personID: UUID?
+        var createdAt: Date
     }
 }
 
@@ -125,15 +148,23 @@ enum BackupService {
             transactions: ledger.transactions.map {
                 .init(
                     id: $0.id, kind: $0.kind, personID: $0.personID, assetID: $0.assetID, locationID: $0.locationID,
-                    quantity: $0.quantityText, unitPrice: $0.unitPriceText, date: $0.date, note: $0.note, createdAt: $0.createdAt
+                    quantity: $0.quantityText, unitPrice: $0.unitPriceText, date: $0.date, note: $0.note, createdAt: $0.createdAt,
+                    transferID: $0.transferID
                 )
             },
             debts: ledger.debts.map {
                 .init(
                     id: $0.id, personID: $0.personID, institution: $0.institution, kind: $0.kind, title: $0.title,
                     remaining: $0.remainingText, monthlyInstallment: $0.monthlyInstallmentText, dueDate: $0.dueDate,
-                    note: $0.note, updatedAt: $0.updatedAt
+                    note: $0.note, updatedAt: $0.updatedAt, paymentDay: $0.paymentDay
                 )
+            },
+            debtPayments: ledger.payments.map {
+                .init(id: $0.id, debtID: $0.debtID, amount: $0.amountText, date: $0.date, note: $0.note, createdAt: $0.createdAt)
+            },
+            goals: ledger.goals.map {
+                .init(id: $0.id, title: $0.title, kind: $0.kind, target: $0.targetText, assetID: $0.assetID,
+                      personID: $0.personID, createdAt: $0.createdAt)
             }
         )
         backup.people.sort { $0.id.uuidString < $1.id.uuidString }
@@ -142,6 +173,8 @@ enum BackupService {
         backup.prices.sort { $0.id.uuidString < $1.id.uuidString }
         backup.transactions.sort { $0.id.uuidString < $1.id.uuidString }
         backup.debts.sort { $0.id.uuidString < $1.id.uuidString }
+        backup.debtPayments?.sort { $0.id.uuidString < $1.id.uuidString }
+        backup.goals?.sort { $0.id.uuidString < $1.id.uuidString }
         return backup
     }
 
@@ -196,6 +229,8 @@ enum BackupService {
         try deleteAll(Asset.self, in: context)
         try deleteAll(Location.self, in: context)
         try deleteAll(Person.self, in: context)
+        try deleteAll(DebtPayment.self, in: context)
+        try deleteAll(Goal.self, in: context)
 
         for entry in backup.people {
             context.insert(Person(id: entry.id, name: entry.name, createdAt: entry.createdAt))
@@ -219,7 +254,8 @@ enum BackupService {
             let info = TransactionInfo(
                 id: entry.id, kind: entry.kind, personID: entry.personID, assetID: entry.assetID,
                 locationID: entry.locationID, quantity: Decimal(storageText: entry.quantity) ?? 0,
-                unitPrice: Decimal(storageText: entry.unitPrice) ?? 0, date: entry.date, createdAt: entry.createdAt
+                unitPrice: Decimal(storageText: entry.unitPrice) ?? 0, date: entry.date, createdAt: entry.createdAt,
+                transferID: entry.transferID
             )
             context.insert(TransactionRecord(info: info, note: entry.note))
         }
@@ -228,7 +264,19 @@ enum BackupService {
                 id: entry.id, personID: entry.personID, institution: entry.institution, kind: entry.kind,
                 title: entry.title, remaining: Decimal(storageText: entry.remaining) ?? 0,
                 monthlyInstallment: entry.monthlyInstallment.flatMap { Decimal(storageText: $0) },
-                dueDate: entry.dueDate, note: entry.note, updatedAt: entry.updatedAt
+                dueDate: entry.dueDate, note: entry.note, updatedAt: entry.updatedAt, paymentDay: entry.paymentDay
+            ))
+        }
+        for entry in backup.debtPayments ?? [] {
+            context.insert(DebtPayment(
+                id: entry.id, debtID: entry.debtID, amount: Decimal(storageText: entry.amount) ?? 0,
+                date: entry.date, note: entry.note, createdAt: entry.createdAt
+            ))
+        }
+        for entry in backup.goals ?? [] {
+            context.insert(Goal(
+                id: entry.id, title: entry.title, kind: entry.kind, target: Decimal(storageText: entry.target) ?? 0,
+                assetID: entry.assetID, personID: entry.personID, createdAt: entry.createdAt
             ))
         }
         try context.save()
@@ -303,7 +351,8 @@ enum BackupService {
             let existing = existingTransactions[entry.id]
             let info = TransactionInfo(
                 id: entry.id, kind: entry.kind, personID: personID, assetID: assetID, locationID: locationID,
-                quantity: quantity, unitPrice: unitPrice, date: entry.date, createdAt: existing?.createdAt ?? entry.createdAt
+                quantity: quantity, unitPrice: unitPrice, date: entry.date, createdAt: existing?.createdAt ?? entry.createdAt,
+                transferID: entry.transferID
             )
             if let existing {
                 if existing.info != info || existing.note != entry.note {

@@ -4,15 +4,25 @@ import Foundation
 
 enum TransactionKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case buy, sell
+    /// Aktarımın iki ayağı: varlık maliyetiyle birlikte bir yerden çıkıp başka bir yere girer.
+    case transferOut, transferIn
 
     var id: Self { self }
+
+    /// Alış/satış formunda seçilebilen türler.
+    static let tradeKinds: [TransactionKind] = [.buy, .sell]
 
     var title: String {
         switch self {
         case .buy: "Alış"
         case .sell: "Satış"
+        case .transferOut, .transferIn: "Aktarım"
         }
     }
+
+    var isTransfer: Bool { self == .transferOut || self == .transferIn }
+    /// Bakiyeyi artıran türler.
+    var addsQuantity: Bool { self == .buy || self == .transferIn }
 }
 
 enum AssetUnit: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -129,6 +139,8 @@ struct TransactionInfo: Identifiable, Hashable, Sendable {
     var unitPrice: Decimal
     var date: Date
     var createdAt: Date
+    /// Aktarımın iki ayağını eşleştirir; alış ve satışta nil.
+    var transferID: UUID? = nil
 
     var key: HoldingKey { HoldingKey(personID: personID, assetID: assetID, locationID: locationID) }
     var total: Decimal { quantity * unitPrice }

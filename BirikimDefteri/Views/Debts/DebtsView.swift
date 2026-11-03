@@ -5,7 +5,6 @@ struct DebtsView: View {
     @Environment(\.ledger) private var ledger
     @Environment(\.modelContext) private var context
     @State private var filter: PersonFilter = .everyone
-    @State private var editing: Debt?
     @State private var isAdding = false
 
     private struct InstitutionGroup: Identifiable {
@@ -65,13 +64,15 @@ struct DebtsView: View {
                     ForEach(groups) { group in
                         Section {
                             ForEach(group.debts) { debt in
-                                Button {
-                                    editing = debt
+                                NavigationLink {
+                                    DebtDetailView(debtID: debt.id)
                                 } label: {
                                     DebtRow(debt: debt, showsPerson: ledger.people.count > 1)
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button("Sil", systemImage: "trash", role: .destructive) {
+                                        Journal.recordDebt(.deleted, summary: Journal.describe(debt), before: Journal.entry(debt), after: nil, in: context)
+                                        for payment in ledger.payments(for: debt) { context.delete(payment) }
                                         context.delete(debt)
                                         try? context.save()
                                     }
@@ -106,9 +107,6 @@ struct DebtsView: View {
                     }
                     .tint(Theme.gold)
                 }
-            }
-            .sheet(item: $editing) { debt in
-                DebtFormView(debt: debt)
             }
             .sheet(isPresented: $isAdding) {
                 DebtFormView()

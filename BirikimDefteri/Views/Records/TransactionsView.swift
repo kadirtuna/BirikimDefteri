@@ -8,8 +8,11 @@ struct TransactionsView: View {
     @State private var locationFilter: UUID?
     @State private var personFilter: UUID?
     @State private var editing: TransactionRecord?
+    @State private var editingTransfer: TransferRef?
     @State private var isAdding = false
+    @State private var isAddingTransfer = false
     @State private var deleteError: String?
+    @State private var undoEntry: JournalEntry?
 
     private struct MonthSection: Identifiable {
         let month: Date
@@ -36,7 +39,11 @@ struct TransactionsView: View {
                     Section(Format.month(section.month)) {
                         ForEach(section.records) { record in
                             Button {
-                                editing = record
+                                if let transferID = record.transferID {
+                                    editingTransfer = TransferRef(id: transferID)
+                                } else {
+                                    editing = record
+                                }
                             } label: {
                                 TransactionRow(info: record.info, note: record.note)
                             }
@@ -57,7 +64,7 @@ struct TransactionsView: View {
                         ContentUnavailableView(
                             "Henüz kayıt yok",
                             systemImage: "tray",
-                            description: Text("Alış ve satışlarınızı + ile ekleyin.")
+                            description: Text("Alış, satış ve aktarımlarınızı + ile ekleyin.")
                         )
                     }
                 }
@@ -66,19 +73,31 @@ struct TransactionsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { filterMenu }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isAdding = true
-                    } label: {
-                        Label("Yeni işlem", systemImage: "plus.circle.fill")
-                    }
-                    .tint(Theme.gold)
+                    AddTransactionMenu(isAddingTrade: $isAdding, isAddingTransfer: $isAddingTransfer)
                 }
             }
             .sheet(item: $editing) { record in
                 TransactionFormView(record: record)
             }
+            .sheet(item: $editingTransfer) { reference in
+                TransferFormView(transferID: reference.id)
+            }
             .sheet(isPresented: $isAdding) {
                 TransactionFormView(assetID: assetFilter)
+            }
+            .sheet(isPresented: $isAddingTransfer) {
+                TransferFormView()
+            }
+            .overlay(alignment: .bottom) {
+                if undoEntry != nil {
+                    UndoBanner(message: "Kayıt silindi", undo: undoLastDeletion)
+                }
+            }
+            .animation(.default, value: undoEntry?.id)
+            .task(id: undoEntry?.id) {
+                guard undoEntry != nil else { return }
+                try? await Task.sleep(for: .seconds(6))
+                undoEntry = nil
             }
             .alert("İşlem silinemedi", isPresented: Binding(isPresent: $deleteError)) {
                 Button("Tamam", role: .cancel) {}
@@ -138,7 +157,13 @@ struct TransactionsView: View {
                     && (personFilter == nil || record.personID == personFilter)
             }
             .sorted { ($0.date, $0.createdAt) > ($1.date, $1.createdAt) }
-        let grouped = Dictionary(grouping: records) { record in
+        // Aktarımın iki ayağından yalnızca biri satır olarak gösterilir.
+        var seenTransfers: Set<UUID> = []
+        let rows = records.filter { record in
+            guard let transferID = record.transferID else { return true }
+            return seenTransfers.insert(transferID).inserted
+        }
+        let grouped = Dictionary(grouping: rows) { record in
             calendar.dateInterval(of: .month, for: record.date)?.start ?? record.date
         }
         return grouped
@@ -155,11 +180,48 @@ struct TransactionsView: View {
     }
 
     private func delete(_ record: TransactionRecord) {
-        if let error = ledger.calculator.validateDeletion(of: record.id) {
+        let records: [TransactionRecord]
+        let summary: String
+        if let transferID = record.transferID {
+            let legs = ledger.transferLegs(transferID)
+            records = [legs.out, legs.in].compactMap { $0 }
+            summary = Journal.describe(legs.out?.info ?? record.info, ledger: ledger, destination: legs.in?.locationID)
+        } else {
+            records = [record]
+            summary = Journal.describe(record.info, ledger: ledger)
+        }
+        if let error = ledger.calculator.validateDeletion(of: Set(records.map(\.id))) {
             deleteError = error.message(unit: ledger.calculator.assets[record.assetID]?.unit)
             return
         }
-        context.delete(record)
+        undoEntry = Journal.recordTransactions(.deleted, summary: summary, before: records, after: [], in: context)
+        records.forEach(context.delete)
         try? context.save()
+    }
+
+    private func undoLastDeletion() {
+        guard let undoEntry else { return }
+        self.undoEntry = nil
+        do {
+            try Journal.undo(undoEntry, ledger: ledger, context: context)
+        } catch {
+            deleteError = error.localizedDescription
+        }
+    }
+}
+
+/// "+" düğmesi: alış/satış ya da aktarım.
+struct AddTransactionMenu: View {
+    @Binding var isAddingTrade: Bool
+    @Binding var isAddingTransfer: Bool
+
+    var body: some View {
+        Menu {
+            Button("Alış / Satış", systemImage: "plus") { isAddingTrade = true }
+            Button("Aktarım", systemImage: "arrow.left.arrow.right") { isAddingTransfer = true }
+        } label: {
+            Label("Yeni işlem", systemImage: "plus.circle.fill")
+        }
+        .tint(Theme.gold)
     }
 }
