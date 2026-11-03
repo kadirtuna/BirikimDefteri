@@ -66,17 +66,7 @@ private struct LocationHeader: View {
         let kind = place.location?.kind ?? .physical
 
         HStack(spacing: 10) {
-            Image(systemName: "\(kind.symbol).fill")
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(
-                    LinearGradient(
-                        colors: kind == .bank ? [Color(hex: 0x1E88E5), Color(hex: 0x0D47A1)] : [Color(hex: 0x2E7D32), Color(hex: 0x1B5E20)],
-                        startPoint: .top, endPoint: .bottom
-                    ),
-                    in: Circle()
-                )
+            PlaceIcon(location: place.location, size: 34)
             VStack(alignment: .leading, spacing: 0) {
                 Text(place.location?.name ?? "Bilinmeyen yer")
                     .font(.headline)

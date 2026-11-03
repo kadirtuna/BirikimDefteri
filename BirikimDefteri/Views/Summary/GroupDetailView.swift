@@ -141,9 +141,7 @@ private struct HoldingRow: View {
             if showsAsset {
                 AssetIcon(asset: asset, size: 32)
             } else {
-                Image(systemName: "\(ledger.calculator.locations[holding.key.locationID]?.kind.symbol ?? "mappin").fill")
-                    .foregroundStyle(Theme.green)
-                    .frame(width: 32)
+                PlaceIcon(location: ledger.calculator.locations[holding.key.locationID], size: 32)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(showsAsset ? asset?.name ?? "Bilinmeyen ürün" : place)

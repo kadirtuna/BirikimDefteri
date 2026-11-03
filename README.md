@@ -72,6 +72,7 @@
 - **Undo and history:** every change to transactions, transfers, debts and payments is logged and can be undone, including a quick undo right after a delete.
 - **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher, and an eye button hides all amounts when someone is looking.
 - **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
+- **Bank logos:** 54 Turkish banks and brokerages are recognized from location and debt names and shown with their logo. Logos are trademarks, so they are not in this repository: `scripts/fetch-logos.py` downloads them for your own build, from each institution's website or, when the site only has a tiny favicon, from its official App Store app. Without them, each institution shows a monogram in its brand color.
 - **In-app guide:** Settings > Kullanım kılavuzu explains every feature, where to find it and how it works, with search.
 - **Native feel:** light and dark mode, Dynamic Type, hand-drawn product icons (bars, coins, bracelets, currency badges).
 
@@ -86,7 +87,7 @@
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
 | System | UserNotifications (local reminders), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 42 tests in 14 suites |
+| Tests | Swift Testing: 45 tests in 15 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -134,7 +135,7 @@ BirikimDefteri/
 ├── Views/           Summary, Transactions, Debts, Prices, Settings, Analytics; icons and theme
 └── Assets.xcassets  App icon, logo, colors
 BirikimDefteriTests/ Swift Testing unit tests
-scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups)
+scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups), fetch-logos.py (local bank logos)
 docs/                README images
 ```
 
@@ -143,6 +144,7 @@ docs/                README images
 - Data lives only in the on-device SwiftData store. No accounts, servers, analytics or ads.
 - Network requests go only to two public endpoints and carry no personal data: `finans.truncgil.com/today.json` and `www.tcmb.gov.tr/kurlar/today.xml`.
 - Automatic backups stay in the app's own container and are copied only by the owner's Mac to the owner's iCloud Drive.
+- The app never downloads logos. `fetch-logos.py` runs on the Mac and the logos are bundled at build time.
 - The demo data (`DemoData.swift`) and test fixtures in this repository are synthetic.
 
 ### Price sources
@@ -245,6 +247,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 - **Geri al ve işlem geçmişi:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir; silme sonrasında hızlı geri al da var.
 - **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir; göz düğmesiyle yanınızda biri varken bütün tutarlar gizlenir.
 - **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
+- **Banka logoları:** Türkiye'deki 54 banka ve aracı kurum, saklama yeri ve borç adlarından tanınıp logosuyla gösterilir. Logolar tescilli marka olduğu için bu depoda yer almaz; `scripts/fetch-logos.py` onları kendi derlemeniz için kurumun sitesinden, sitede yalnızca küçük bir favicon varsa resmi App Store uygulamasından indirir. Logo yoksa kurum, marka renginde baş harf rozetiyle görünür.
 - **Kullanım kılavuzu:** Ayarlar > Kullanım kılavuzu; her özelliğin ne işe yaradığı, nerede olduğu ve nasıl kullanıldığı, aramalı.
 - **Yerel his:** açık ve koyu mod, Dynamic Type; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
 
@@ -259,7 +262,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
 | Sistem | UserNotifications (yerel hatırlatmalar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 42 test, 14 grup |
+| Test | Swift Testing: 45 test, 15 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -307,7 +310,7 @@ BirikimDefteri/
 ├── Views/           Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz; simgeler ve tema
 └── Assets.xcassets  Uygulama simgesi, logo, renkler
 BirikimDefteriTests/ Swift Testing birim testleri
-scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek)
+scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek), fetch-logos.py (yerel banka logoları)
 docs/                README görselleri
 ```
 
@@ -316,6 +319,7 @@ docs/                README görselleri
 - Veriler yalnızca cihazdaki SwiftData deposunda durur. Hesap, sunucu, analitik ya da reklam yok.
 - İnternete giden istekler yalnızca şu iki adrese gider ve kişisel veri içermez: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`.
 - Otomatik yedekler uygulamanın kendi klasöründe tutulur ve yalnızca kullanıcının kendi Mac'i tarafından kendi iCloud Drive'ına kopyalanır.
+- Uygulama logo indirmez. `fetch-logos.py` Mac'te çalışır, logolar derleme sırasında uygulamaya eklenir.
 - Depodaki örnek veriler (`DemoData.swift`) ve test verileri uydurmadır.
 
 ### Fiyat kaynakları

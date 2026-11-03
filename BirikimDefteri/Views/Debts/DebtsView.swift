@@ -130,7 +130,7 @@ private struct DebtRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            DebtKindIcon(kind: debt.kind, size: iconSize)
+            DebtIcon(kind: debt.kind, institution: debt.institution, size: iconSize)
             VStack(alignment: .leading, spacing: 2) {
                 Text(debt.title.isEmpty ? debt.kind.title : debt.title)
                     .foregroundStyle(Color.primary)

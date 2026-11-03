@@ -321,6 +321,19 @@ private struct LocationsLinkLabel: View {
     let breakdown: [LocationHoldings]
 
     var body: some View {
+        HStack(spacing: 8) {
+            label
+            Spacer(minLength: 4)
+            HStack(spacing: -8) {
+                ForEach(breakdown.prefix(4)) { place in
+                    PlaceIcon(location: place.location, size: 26)
+                        .background(Circle().fill(Color(.secondarySystemGroupedBackground)).padding(-1.5))
+                }
+            }
+        }
+    }
+
+    private var label: some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Varlıklarım nerede?")

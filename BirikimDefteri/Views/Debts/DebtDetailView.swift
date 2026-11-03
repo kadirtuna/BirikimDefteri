@@ -25,7 +25,7 @@ struct DebtDetailView: View {
         return List {
             Section {
                 HStack(spacing: 14) {
-                    DebtKindIcon(kind: debt.kind, size: 52)
+                    DebtIcon(kind: debt.kind, institution: debt.institution, size: 52)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(debt.title.isEmpty ? debt.kind.title : debt.title)
                             .font(.title3.weight(.semibold))

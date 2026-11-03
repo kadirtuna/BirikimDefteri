@@ -47,6 +47,7 @@ struct DebtFormView: View {
                 Section {
                     TextField("Kurum (ör. Ziraat Bankası)", text: $institution)
                         .textInputAutocapitalization(.words)
+                    InstitutionMatchRow(name: institution)
                     TextField("Açıklama (ör. İhtiyaç kredisi)", text: $title)
                     if ledger.people.count > 1 || personID == nil {
                         Picker("Kişi", selection: $personID) {

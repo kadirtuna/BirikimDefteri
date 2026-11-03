@@ -87,7 +87,7 @@ struct LocationsView: View {
                         Label {
                             LabeledContent(location.name, value: location.kind.title)
                         } icon: {
-                            Image(systemName: location.kind.symbol)
+                            PlaceIcon(location: location.info, size: 28)
                         }
                     }
                     .foregroundStyle(Color.primary)
@@ -151,6 +151,9 @@ struct LocationEditorView: View {
             Form {
                 TextField("Ad (ör. Ziraat Bankası, Kasa)", text: $name)
                     .textInputAutocapitalization(.words)
+                if kind == .bank {
+                    InstitutionMatchRow(name: name)
+                }
                 Picker("Tür", selection: $kind) {
                     ForEach(LocationKind.allCases) { Text($0.title).tag($0) }
                 }

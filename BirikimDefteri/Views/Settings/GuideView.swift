@@ -154,7 +154,7 @@ enum GuideContent {
                 items: [
                     .init(title: "Kişi", text: "Varlığın kime ait olduğu. Kişileri Ayarlar > Kişiler'den ekleyip adlarını değiştirebilirsiniz. Özet ve Analiz'deki kişi seçiciyle herkesi ya da tek bir kişiyi görürsünüz."),
                     .init(title: "Ürün", text: "Takip ettiğiniz şey: gram altın, çeyrek altın, gümüş, dolar, euro, fon, TL… Her ürünün bir birimi (gr, adet, $, €, ₺) ve türü vardır. Ayarlar > Ürünler'den yeni ürün ekleyebilirsiniz."),
-                    .init(title: "Saklama yeri", text: "Varlığın durduğu yer: Fiziki (elde), bir banka ya da aracı kurum. Ayarlar > Saklama yerleri'nden yönetilir."),
+                    .init(title: "Saklama yeri", text: "Varlığın durduğu yer: Fiziki (elde), bir banka ya da aracı kurum. Ayarlar > Saklama yerleri'nden yönetilir. Türkiye'deki bankalar ve aracı kurumlar adından tanınır ve logosuyla gösterilir; tanınan kurum, ad yazılırken formda görünür. Borçlardaki kurum adı da aynı şekilde tanınır."),
                     .init(title: "İşlem", text: "Her alış, satış ve aktarım bir işlemdir. Bakiyeler ayrıca saklanmaz; her zaman işlemlerden kişi, ürün ve yer bazında hesaplanır. Bu yüzden bir işlemi düzelttiğinizde bütün toplamlar kendiliğinden düzelir."),
                     .init(title: "Ortalama maliyet", text: "Aynı ürünü farklı fiyatlarla aldığınızda maliyetiniz ortalamaya göre tutulur. Satışta, satılan miktarın ortalama maliyeti düşülür; satış tutarıyla arasındaki fark gerçekleşen kâr ya da zarardır."),
                 ]

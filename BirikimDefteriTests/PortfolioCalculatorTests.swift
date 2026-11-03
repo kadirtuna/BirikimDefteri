@@ -666,3 +666,43 @@ struct ExportAndPrivacyTests {
         #expect(Format.percent(d("0.5")) == "%50")
     }
 }
+
+@Suite("Kurum tanıma")
+struct InstitutionTests {
+    @Test("Yer ve borç adları doğru kuruma eşlenir", arguments: [
+        ("T.C. Ziraat Bankası", "ziraat"),
+        ("Ziraat Katılım", "ziraatkatilim"),
+        ("Garanti BBVA", "garanti"),
+        ("Türkiye Halk Bankası", "halkbank"),
+        ("VakıfBank", "vakifbank"),
+        ("Vakıf Katılım", "vakifkatilim"),
+        ("ING Bank", "ing"),
+        ("Türkiye İş Bankası", "isbank"),
+        ("İş Yatırım Menkul Değerler", "isyatirim"),
+        ("Türkiye Finans", "turkiyefinans"),
+        ("YAPI KREDİ", "yapikredi"),
+        ("QNB Finansbank", "qnb"),
+        ("CEPTETEB", "teb"),
+        ("A&T Bank", "atbank"),
+        ("Gedik Yatırım", "gedik"),
+        ("ALBARAKATÜRK KATILIM BANKASI A.Ş.", "albaraka"),
+        ("Industrial and Commercial Bank of China", "icbc"),
+        ("Bank of China Limited", "bankofchina"),
+    ])
+    func matches(name: String, id: String) {
+        #expect(Institution.match(name)?.id == id)
+    }
+
+    @Test("Kurum olmayan adlar eşlenmez", arguments: ["Fiziki (elde)", "Kasa", "Ev", "İngiltere hesabı", ""])
+    func noMatch(name: String) {
+        #expect(Institution.match(name) == nil)
+    }
+
+    @Test("Kimlikler ve takma adlar benzersiz")
+    func uniqueness() {
+        let ids = Institution.all.map(\.id)
+        #expect(Set(ids).count == ids.count)
+        let aliases = Institution.all.flatMap { $0.aliases.map { Institution.normalizedTokens($0).joined(separator: " ") } }
+        #expect(Set(aliases).count == aliases.count)
+    }
+}

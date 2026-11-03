@@ -267,14 +267,7 @@ struct GroupIcon: View {
                 }
                 .frame(width: size, height: size)
         case .location(let id):
-            Circle()
-                .fill(color.gradient)
-                .overlay {
-                    Image(systemName: "\(ledger.calculator.locations[id]?.kind.symbol ?? "mappin").fill")
-                        .font(.system(size: size * 0.42))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: size, height: size)
+            PlaceIcon(location: ledger.calculator.locations[id], size: size, color: color)
         }
     }
 

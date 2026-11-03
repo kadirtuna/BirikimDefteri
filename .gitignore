@@ -4,3 +4,7 @@ build/
 DerivedData/
 xcuserdata/
 *.xcuserstate
+
+# Kurum logoları tescilli markadır; scripts/fetch-logos.py ile yerelde indirilir.
+BirikimDefteri/InstitutionLogos.xcassets/
+__pycache__/
