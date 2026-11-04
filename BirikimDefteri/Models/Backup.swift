@@ -46,6 +46,7 @@ struct BackupFile: Codable {
         var assetID: UUID
         var price: String
         var date: Date
+        var locationID: UUID? = nil
     }
 
     struct TransactionEntry: Codable {
@@ -144,7 +145,7 @@ enum BackupService {
             assets: ledger.assets.map {
                 .init(id: $0.id, name: $0.name, unit: $0.unit, category: $0.category, sortOrder: $0.sortOrder, createdAt: $0.createdAt)
             },
-            prices: ledger.prices.map { .init(id: $0.id, assetID: $0.assetID, price: $0.priceText, date: $0.date) },
+            prices: ledger.prices.map { .init(id: $0.id, assetID: $0.assetID, price: $0.priceText, date: $0.date, locationID: $0.locationID) },
             transactions: ledger.transactions.map {
                 .init(
                     id: $0.id, kind: $0.kind, personID: $0.personID, assetID: $0.assetID, locationID: $0.locationID,
@@ -248,7 +249,9 @@ enum BackupService {
             Store.insertLira(in: context)
         }
         for entry in backup.prices {
-            context.insert(PricePoint(id: entry.id, assetID: entry.assetID, price: Decimal(storageText: entry.price) ?? 0, date: entry.date))
+            context.insert(PricePoint(
+                id: entry.id, assetID: entry.assetID, price: Decimal(storageText: entry.price) ?? 0, date: entry.date, locationID: entry.locationID
+            ))
         }
         for entry in backup.transactions {
             let info = TransactionInfo(
@@ -334,7 +337,9 @@ enum BackupService {
         let existingPrices = Set(try context.fetch(FetchDescriptor<PricePoint>()).map(\.id))
         for entry in backup.prices where !existingPrices.contains(entry.id) {
             guard let assetID = assetIDs[entry.assetID], let price = Decimal(storageText: entry.price) else { continue }
-            context.insert(PricePoint(id: entry.id, assetID: assetID, price: price, date: entry.date))
+            let locationID = entry.locationID.flatMap { locationIDs[$0] }
+            if entry.locationID != nil, locationID == nil { continue }
+            context.insert(PricePoint(id: entry.id, assetID: assetID, price: price, date: entry.date, locationID: locationID))
         }
 
         let existingTransactions = Dictionary(

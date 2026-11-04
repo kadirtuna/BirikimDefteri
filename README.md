@@ -89,7 +89,7 @@
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
 | System | UserNotifications (local reminders), App Intents (Siri, Shortcuts), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 52 tests in 18 suites |
+| Tests | Swift Testing: 57 tests in 19 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -144,7 +144,7 @@ docs/                README images
 ### Privacy
 
 - Data lives only in the on-device SwiftData store. No accounts, servers, analytics or ads.
-- Network requests go only to two public endpoints and carry no personal data: `finans.truncgil.com/today.json` and `www.tcmb.gov.tr/kurlar/today.xml`.
+- Network requests go only to public price pages and carry no personal data: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`, `api.coingecko.com` (XAUT) and the bank/dealer comparison tables on `altin.doviz.com` and `kur.doviz.com`.
 - Automatic backups stay in the app's own container and are copied only by the owner's Mac to the owner's iCloud Drive.
 - The app never downloads logos. `fetch-logos.py` runs on the Mac and the logos are bundled at build time.
 - The demo data (`DemoData.swift`) and test fixtures in this repository are synthetic.
@@ -156,8 +156,10 @@ docs/                README images
 | Gram, quarter, half, full, Republic, Reşat, Ata gold coins; 22/18/14 karat | [Truncgil Finans](https://finans.truncgil.com/today.json) | Grand Bazaar bid |
 | Gram silver | Truncgil Finans | Bid |
 | USD, EUR | [TCMB](https://www.tcmb.gov.tr/kurlar/today.xml) (fallback: Truncgil) | Forex buying rate |
+| XAUT (tokenized gold at a brokerage) | [CoinGecko](https://www.coingecko.com/en/coins/tether-gold) | Market price per troy ounce ÷ 31.1035, per gram |
+| Gold, silver, USD, EUR at a specific bank or dealer | [doviz.com](https://altin.doviz.com/fibabanka/gram-altin) comparison tables | That institution's buy price |
 
-Products are recognized by name (`Core/Quotes.swift`). Fund and lira prices stay manual. The Truncgil response is sometimes truncated, so the app retries and also extracts values from partial responses. Valuing holdings at the bid price is deliberate: it shows what you would actually receive if you sold.
+Products are recognized by name (`Core/Quotes.swift`). Fund and lira prices stay manual. The Truncgil response is sometimes truncated, so the app retries and also extracts values from partial responses. **Valuation never overstates what you would receive.** Each holding is valued at the buy price of the place it is held: a bank's own bid for gold, silver, USD and EUR; the lowest bid among the big dealers (Kapalıçarşı, Altınkaynak, Harem, Odacı, Venüs) for physical gram gold and cash; XAUT at a brokerage (Midas) at the market price minus the highest sell commission (0.20%) and a 0.30% spread allowance; the lowest bid across all banks for an unrecognized bank. If an institution's price cannot be fetched, its last known spread to the general price is kept. Location prices are stored per product × location (`PricePoint.locationID`).
 
 ### Getting started
 
@@ -266,7 +268,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
 | Sistem | UserNotifications (yerel hatırlatmalar), App Intents (Siri, Kısayollar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 52 test, 18 grup |
+| Test | Swift Testing: 57 test, 19 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -321,7 +323,7 @@ docs/                README görselleri
 ### Gizlilik
 
 - Veriler yalnızca cihazdaki SwiftData deposunda durur. Hesap, sunucu, analitik ya da reklam yok.
-- İnternete giden istekler yalnızca şu iki adrese gider ve kişisel veri içermez: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`.
+- İnternete giden istekler yalnızca herkese açık fiyat sayfalarına gider ve kişisel veri içermez: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`, `api.coingecko.com` (XAUT) ve `altin.doviz.com` / `kur.doviz.com` banka ve kuyumcu tabloları.
 - Otomatik yedekler uygulamanın kendi klasöründe tutulur ve yalnızca kullanıcının kendi Mac'i tarafından kendi iCloud Drive'ına kopyalanır.
 - Uygulama logo indirmez. `fetch-logos.py` Mac'te çalışır, logolar derleme sırasında uygulamaya eklenir.
 - Depodaki örnek veriler (`DemoData.swift`) ve test verileri uydurmadır.
@@ -333,8 +335,10 @@ docs/                README görselleri
 | Gram, çeyrek, yarım, tam, Cumhuriyet, Reşat, Ata altın; 22/18/14 ayar | [Truncgil Finans](https://finans.truncgil.com/today.json) | Kapalıçarşı alış |
 | Gram gümüş | Truncgil Finans | Alış |
 | Dolar, euro | [TCMB](https://www.tcmb.gov.tr/kurlar/today.xml) (yedek: Truncgil) | Döviz alış |
+| XAUT (aracı kurumdaki token altın) | [CoinGecko](https://www.coingecko.com/en/coins/tether-gold) | Ons piyasa fiyatı ÷ 31,1035, gram başına |
+| Belirli bir banka ya da kuyumcudaki altın, gümüş, dolar, euro | [doviz.com](https://altin.doviz.com/fibabanka/gram-altin) karşılaştırma tabloları | O kurumun alış fiyatı |
 
-Ürünler adlarından tanınır (`Core/Quotes.swift`). Fonların ve TL'nin fiyatı elle kalır. Truncgil yanıtı zaman zaman yarıda kesildiği için birkaç kez denenir; kesik yanıttaki değerler de ayıklanır. Değerlemede alış fiyatının kullanılması bilinçli bir tercih: satsanız elinize geçecek tutarı gösterir.
+Ürünler adlarından tanınır (`Core/Quotes.swift`). Fonların ve TL'nin fiyatı elle kalır. Truncgil yanıtı zaman zaman yarıda kesildiği için birkaç kez denenir; kesik yanıttaki değerler de ayıklanır. **Gösterilen değer, bozdurduğunuzda eline geçecek tutardan fazla olmaz.** Her bakiye durduğu yerin alış fiyatıyla değerlenir: bankadaki altın, gümüş, dolar ve euro o bankanın alışıyla; fiziki gram altın ve döviz büyük kuyumcuların (Kapalıçarşı, Altınkaynak, Harem, Odacı, Venüs) en düşük alışıyla; aracı kurumdaki (Midas) XAUT piyasa fiyatından en yüksek satış komisyonu (%0,20) ve %0,30 fiyat farkı payı düşülerek; tanınmayan bankada bütün bankaların en düşük alışıyla. Kurumun fiyatı alınamazsa genel fiyata olan son bilinen farkı korunur. Yere özel fiyatlar ürün × yer olarak saklanır (`PricePoint.locationID`).
 
 ### Kurulum
 

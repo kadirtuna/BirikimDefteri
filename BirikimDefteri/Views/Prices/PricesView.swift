@@ -24,7 +24,7 @@ struct PricesView: View {
                             Task { await refresh() }
                         }
                     } footer: {
-                        Text("Altın ve gümüş: Truncgil Finans (Kapalıçarşı alış fiyatı). Dolar ve euro: TCMB döviz alış kuru. Yalnızca fiyat indirilir, verileriniz cihazdan çıkmaz.")
+                        Text("Altın ve gümüş: Truncgil Finans (Kapalıçarşı alış fiyatı). Dolar ve euro: TCMB döviz alış kuru. XAUT: CoinGecko piyasa fiyatı. Yalnızca fiyat indirilir, verileriniz cihazdan çıkmaz.")
                     }
                 }
 
@@ -36,6 +36,7 @@ struct PricesView: View {
                             isAutomatic: QuoteKey.key(for: asset.info) != nil,
                             monthChange: ledger.calculator.marketChange(of: asset.id, since: monthAgo),
                             history: recentPrices(of: asset.id),
+                            locationPrices: locationPrices(of: asset.id),
                             state: state(for: asset),
                             text: Binding(
                                 get: { drafts[asset.id] ?? "" },
@@ -44,7 +45,7 @@ struct PricesView: View {
                         )
                     }
                 } footer: {
-                    Text("Küçük grafik ve yüzde son 30 günü gösterir. 1 birimin Türk lirası karşılığını girin. Kaydet'e bastığınızda yalnızca değiştirdiğiniz fiyatlar kaydedilir. Otomatik işaretli ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir.")
+                    Text("Varlıklarınız, durdukları kurumun alış fiyatıyla değerlenir: bozdurursanız eline geçecek tutar. Bankada o bankanın alışı, fiziki altında büyük kuyumcuların en düşük alışı, Midas'ta XAUT fiyatından %0,5 kesinti düşülmüş hâli. Küçük grafik ve yüzde son 30 günü gösterir. 1 birimin Türk lirası karşılığını girin. Kaydet'e bastığınızda yalnızca değiştirdiğiniz fiyatlar kaydedilir. Otomatik işaretli ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir.")
                 }
 
                 if let savedCount {
@@ -76,6 +77,19 @@ struct PricesView: View {
     }
 
     private var monthAgo: Date { Date.now.addingTimeInterval(-30 * 86_400) }
+
+    /// Ürünün elde bulunduğu yerlerdeki alış fiyatları; yalnızca yere özel fiyatı olan yerler.
+    private func locationPrices(of assetID: UUID) -> [(name: String, price: Decimal)] {
+        let calculator = ledger.calculator
+        let locations = Set(calculator.holdings().filter { $0.key.assetID == assetID }.map(\.key.locationID))
+        return locations.compactMap { locationID -> (name: String, price: Decimal)? in
+            guard calculator.locationPriceHistory[HoldingPlace(assetID: assetID, locationID: locationID)] != nil,
+                  let price = calculator.price(of: assetID, at: locationID)
+            else { return nil }
+            return (ledger.locationName(locationID), price)
+        }
+        .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+    }
 
     /// Son 30 günün fiyat kayıtları; dönem başındaki fiyat da başlangıç noktası olarak eklenir.
     private func recentPrices(of assetID: UUID) -> [PriceInfo] {
@@ -141,6 +155,7 @@ private struct PriceRow: View {
     let isAutomatic: Bool
     let monthChange: Decimal?
     let history: [PriceInfo]
+    let locationPrices: [(name: String, price: Decimal)]
     let state: PriceDraftState
     @Binding var text: String
     @ScaledMetric private var iconSize: CGFloat = 38
@@ -165,6 +180,12 @@ private struct PriceRow: View {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(latest == nil ? Color.orange : Color.secondary)
+                ForEach(locationPrices, id: \.name) { item in
+                    Text("\(item.name) alışı \(Format.lira(item.price))")
+                        .font(.caption)
+                        .foregroundStyle(Theme.green)
+                        .monospacedDigit()
+                }
             }
             Spacer(minLength: 8)
             DecimalTextField(placeholder: "₺0,00", text: $text, isInvalid: state == .invalid, accessibilityLabel: "\(asset.name) fiyatı")

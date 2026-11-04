@@ -1,6 +1,7 @@
 import Foundation
 
-/// İnternetten fiyatı çekilebilen ürünler. Ham değer, Truncgil Finans akışındaki anahtardır.
+/// İnternetten fiyatı çekilebilen ürünler. Ham değer, Truncgil Finans akışındaki anahtardır
+/// (XAUT'ta CoinGecko kimliği).
 enum QuoteKey: String, CaseIterable, Sendable {
     case gramGold = "gram-altin"
     case quarterGold = "ceyrek-altin"
@@ -15,6 +16,11 @@ enum QuoteKey: String, CaseIterable, Sendable {
     case silver = "gumus"
     case usd = "USD"
     case eur = "EUR"
+    /// Tether Gold token'ı (ör. Midas'taki altın). 1 XAUT = 1 ons; uygulamada gram olarak tutulur.
+    case xaut = "tether-gold"
+
+    /// Truncgil akışında bulunan anahtarlar.
+    static let truncgilKeys = allCases.filter { $0 != .xaut }
 
     /// Ürünü adından ve biriminden tanır. Fon, TL ve tanınmayan ürünlerin fiyatı yalnızca elle girilir.
     static func key(for asset: AssetInfo) -> QuoteKey? {
@@ -26,6 +32,7 @@ enum QuoteKey: String, CaseIterable, Sendable {
         }
         guard asset.category != .fund else { return nil }
         let name = asset.name.lowercased(with: Format.locale)
+        if name.contains("xaut") || name.contains("tether gold") { return asset.unit == .gram ? .xaut : nil }
         if name.contains("gümüş") { return asset.unit == .gram ? .silver : nil }
         let pieceKeys: [(String, QuoteKey)] = [
             ("çeyrek", .quarterGold), ("yarım", .halfGold), ("cumhuriyet", .republicGold),
@@ -47,7 +54,7 @@ enum QuoteParser {
     static func truncgil(_ data: Data) -> [QuoteKey: Decimal] {
         var result: [QuoteKey: Decimal] = [:]
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            for key in QuoteKey.allCases {
+            for key in QuoteKey.truncgilKeys {
                 if let entry = object[key.rawValue] as? [String: Any], let text = entry["Alış"] as? String,
                    let value = turkishNumber(text), value > 0 {
                     result[key] = value
@@ -56,7 +63,7 @@ enum QuoteParser {
             return result
         }
         guard let text = String(data: data, encoding: .utf8) else { return result }
-        for key in QuoteKey.allCases {
+        for key in QuoteKey.truncgilKeys {
             let pattern = "\"\(NSRegularExpression.escapedPattern(for: key.rawValue))\":\\{[^}]*?\"Alış\":\"([^\"]+)\""
             guard let regex = try? NSRegularExpression(pattern: pattern),
                   let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
@@ -82,6 +89,23 @@ enum QuoteParser {
             result[key] = value
         }
         return result
+    }
+
+    /// Troy onsun gram karşılığı.
+    static let gramsPerOunce = Decimal(string: "31.1034768", locale: Locale(identifier: "en_US_POSIX"))!
+
+    /// CoinGecko `simple/price` yanıtından XAUT'un TL fiyatını okur ve 1 gramın fiyatına çevirir (kuruşa yuvarlı).
+    static func coinGeckoXAUT(_ data: Data) -> Decimal? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entry = object[QuoteKey.xaut.rawValue] as? [String: Any],
+              let number = entry["try"] as? NSNumber
+        else { return nil }
+        let perOunce = Decimal(string: number.stringValue, locale: Locale(identifier: "en_US_POSIX")) ?? number.decimalValue
+        guard perOunce > 0 else { return nil }
+        var perGram = perOunce / gramsPerOunce
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &perGram, 2, .plain)
+        return rounded
     }
 
     /// "6.287,79" ya da "$3.911,67" gibi Türkçe biçimli sayıyı okur.

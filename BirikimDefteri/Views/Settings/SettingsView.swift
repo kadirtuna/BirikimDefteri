@@ -145,7 +145,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Fiyatlar")
                 } footer: {
-                    Text("Açıkken uygulama her açılışta, son güncellemenin üzerinden bir saat geçtiyse fiyatları internetten çeker. Altın ve gümüş Truncgil Finans'tan, dolar ve euro TCMB'den alınır. Fiyatları her zaman elle de girebilirsiniz.")
+                    Text("Açıkken uygulama her açılışta, son güncellemenin üzerinden bir saat geçtiyse fiyatları internetten çeker. Altın ve gümüş Truncgil Finans'tan, dolar ve euro TCMB'den, XAUT CoinGecko'dan, kurumların alış fiyatları doviz.com'dan alınır. Fiyatları her zaman elle de girebilirsiniz.")
                 }
 
                 Section {

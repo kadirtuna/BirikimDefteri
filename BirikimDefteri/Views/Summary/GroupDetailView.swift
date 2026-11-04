@@ -30,7 +30,8 @@ struct GroupDetailView: View {
                 .padding(.vertical, 4)
 
                 if case .asset(let assetID) = key, let asset = calculator.assets[assetID] {
-                    assetOverview(detail, asset: asset, price: calculator.price(of: assetID))
+                    assetOverview(detail, asset: asset, price: detail.hasMissingPrice || detail.quantity == 0
+                                  ? calculator.price(of: assetID) : detail.value / detail.quantity)
                 } else {
                     groupOverview(detail)
                 }
@@ -96,7 +97,7 @@ struct GroupDetailView: View {
         if let averageCost = detail.averageCost {
             LabeledContent("Ortalama maliyet (1 \(asset.unit.symbol))", value: Format.lira(averageCost))
         }
-        LabeledContent("Güncel fiyat (1 \(asset.unit.symbol))") {
+        LabeledContent("Bozdurma değeri (1 \(asset.unit.symbol))") {
             if let price {
                 Text(Format.lira(price))
             } else {

@@ -169,7 +169,9 @@ enum Journal {
                                  sortOrder: entry.sortOrder, createdAt: entry.createdAt))
         }
         for entry in snapshot.prices where !ledger.prices.contains(where: { $0.id == entry.id }) {
-            context.insert(PricePoint(id: entry.id, assetID: entry.assetID, price: Decimal(storageText: entry.price) ?? 0, date: entry.date))
+            context.insert(PricePoint(
+                id: entry.id, assetID: entry.assetID, price: Decimal(storageText: entry.price) ?? 0, date: entry.date, locationID: entry.locationID
+            ))
         }
         for entry in snapshot.goals where !ledger.goals.contains(where: { $0.id == entry.id }) {
             context.insert(Goal(id: entry.id, title: entry.title, kind: entry.kind, target: Decimal(storageText: entry.target) ?? 0,
@@ -290,7 +292,7 @@ enum Journal {
     }
 
     static func entry(_ price: PricePoint) -> BackupFile.PriceEntry {
-        .init(id: price.id, assetID: price.assetID, price: price.priceText, date: price.date)
+        .init(id: price.id, assetID: price.assetID, price: price.priceText, date: price.date, locationID: price.locationID)
     }
 
     static func entry(_ goal: Goal) -> BackupFile.GoalEntry {

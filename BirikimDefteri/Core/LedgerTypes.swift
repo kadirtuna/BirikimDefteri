@@ -127,6 +127,8 @@ struct PriceInfo: Hashable, Sendable {
     let assetID: UUID
     var price: Decimal
     var date: Date
+    /// Doluysa bu fiyat yalnızca o yerdeki bakiyeler için geçerlidir (ör. bankanın altın alış fiyatı).
+    var locationID: UUID? = nil
 }
 
 struct TransactionInfo: Identifiable, Hashable, Sendable {

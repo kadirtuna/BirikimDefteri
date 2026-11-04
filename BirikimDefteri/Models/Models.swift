@@ -80,17 +80,20 @@ final class PricePoint {
     var assetID: UUID = UUID()
     var priceText: String = "0"
     var date: Date = Date.now
+    /// Yere özel alış fiyatı (banka, kuyumcu, aracı kurum); boşsa ürünün genel fiyatıdır.
+    var locationID: UUID?
 
-    init(id: UUID = UUID(), assetID: UUID, price: Decimal, date: Date = .now) {
+    init(id: UUID = UUID(), assetID: UUID, price: Decimal, date: Date = .now, locationID: UUID? = nil) {
         self.id = id
         self.assetID = assetID
         self.priceText = price.storageText
         self.date = date
+        self.locationID = locationID
     }
 
     var price: Decimal { Decimal(storageText: priceText) ?? 0 }
 
-    var info: PriceInfo { PriceInfo(assetID: assetID, price: price, date: date) }
+    var info: PriceInfo { PriceInfo(assetID: assetID, price: price, date: date, locationID: locationID) }
 }
 
 @Model

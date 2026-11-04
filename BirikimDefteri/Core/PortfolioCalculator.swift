@@ -41,6 +41,12 @@ struct HoldingKey: Hashable, Sendable {
     let locationID: UUID
 }
 
+/// Bir ürünün bir yerdeki fiyatının anahtarı.
+struct HoldingPlace: Hashable, Sendable {
+    let assetID: UUID
+    let locationID: UUID
+}
+
 struct Holding: Identifiable, Hashable, Sendable {
     let key: HoldingKey
     let quantity: Decimal
@@ -148,9 +154,12 @@ struct PortfolioCalculator: Sendable {
     let people: [UUID: PersonInfo]
     let locations: [UUID: LocationInfo]
     let assets: [UUID: AssetInfo]
+    /// Ürünlerin genel (yere bağlı olmayan) son fiyatı.
     let latestPrices: [UUID: PriceInfo]
-    /// Her ürünün fiyat kayıtları, tarihe göre artan sırada.
+    /// Her ürünün genel fiyat kayıtları, tarihe göre artan sırada.
     let priceHistory: [UUID: [PriceInfo]]
+    /// Yere özel alış fiyatları (ürün × yer), tarihe göre artan sırada.
+    let locationPriceHistory: [HoldingPlace: [PriceInfo]]
     /// Kronolojik sırada (tarih, sonra oluşturulma zamanı).
     let transactions: [TransactionInfo]
     let debts: [DebtInfo]
@@ -168,8 +177,12 @@ struct PortfolioCalculator: Sendable {
         debts: [DebtInfo] = []
     ) {
         let assetsByID = Dictionary(assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let history = Dictionary(grouping: prices, by: \.assetID).mapValues { $0.sorted { $0.date < $1.date } }
+        let history = Dictionary(grouping: prices.filter { $0.locationID == nil }, by: \.assetID)
+            .mapValues { $0.sorted { $0.date < $1.date } }
         let latest = history.compactMapValues(\.last)
+        let locationHistory = Dictionary(grouping: prices.filter { $0.locationID != nil }) {
+            HoldingPlace(assetID: $0.assetID, locationID: $0.locationID ?? UUID())
+        }.mapValues { $0.sorted { $0.date < $1.date } }
         let sorted = transactions.sorted(by: Self.isChronological)
 
         var state: [HoldingKey: Position] = [:]
@@ -184,6 +197,7 @@ struct PortfolioCalculator: Sendable {
         self.assets = assetsByID
         self.latestPrices = latest
         self.priceHistory = history
+        self.locationPriceHistory = locationHistory
         self.transactions = sorted
         self.debts = debts
         self.allRealizedGains = realized
@@ -192,21 +206,46 @@ struct PortfolioCalculator: Sendable {
         self.allHoldings = state.compactMap { key, position in
             position.quantity > 0
                 ? Holding(key: key, quantity: position.quantity, cost: position.cost,
-                          price: Self.price(of: assetsByID[key.assetID], latest: latest))
+                          price: Self.price(of: assetsByID[key.assetID], at: nil, generic: history,
+                                            local: locationHistory[HoldingPlace(assetID: key.assetID, locationID: key.locationID)]))
                 : nil
         }
     }
 
     // MARK: Fiyat
 
+    /// Ürünün genel güncel fiyatı (form önerileri ve fiyat listesi için).
     func price(of assetID: UUID) -> Decimal? {
-        Self.price(of: assets[assetID], latest: latestPrices)
+        guard let asset = assets[assetID] else { return nil }
+        if asset.unit == .lira { return 1 }
+        return latestPrices[assetID]?.price
     }
 
-    private static func price(of asset: AssetInfo?, latest: [UUID: PriceInfo]) -> Decimal? {
+    /// Bir yerdeki 1 birimin değeri: o yerin alış fiyatı, yoksa genel fiyat. `date` nil ise güncel değer.
+    func price(of assetID: UUID, at location: UUID, on date: Date? = nil) -> Decimal? {
+        Self.price(of: assets[assetID], at: date, generic: priceHistory,
+                   local: locationPriceHistory[HoldingPlace(assetID: assetID, locationID: location)])
+    }
+
+    /// Yere özel fiyat varsa onu, genel fiyat ondan sonra değiştiyse aradaki alış farkını koruyarak kullanır.
+    /// Böylece kurumun fiyatı alınamadığında değer genel (daha yüksek) fiyata kaymaz. Yere özel fiyattan
+    /// önceki tarihler de ilk bilinen farkla hesaplanır, geçmiş grafiği bugünkü değerle tutarlı kalır.
+    private static func price(
+        of asset: AssetInfo?, at date: Date?, generic: [UUID: [PriceInfo]], local: [PriceInfo]?
+    ) -> Decimal? {
         guard let asset else { return nil }
         if asset.unit == .lira { return 1 }
-        return latest[asset.id]?.price
+        let general = generic[asset.id] ?? []
+        func generalPrice(_ date: Date?) -> Decimal? {
+            guard let date else { return general.last?.price }
+            return (last(in: general, atOrBefore: date) ?? general.first)?.price
+        }
+        guard let local, let firstLocal = local.first else { return generalPrice(date) }
+        let point = date.flatMap { last(in: local, atOrBefore: $0) } ?? (date == nil ? local.last : nil) ?? firstLocal
+        guard let base = generalPrice(point.date), base > 0, let current = generalPrice(date) else { return point.price }
+        let isLatestGeneral = date == nil ? (general.last?.date ?? .distantPast) <= point.date : false
+        if isLatestGeneral || current == base { return point.price }
+        return current * point.price / base
     }
 
     // MARK: Bakiyeler
@@ -486,7 +525,10 @@ extension PortfolioCalculator {
 
     /// Geçmiş bir tarihteki birim fiyat: o tarihe kadarki son fiyat kaydı; ilk kayıttan öncesi için
     /// son işlem fiyatı. Hiç fiyat kaydı olmayan ürün, güncel toplamlarla tutarlı olsun diye dışarıda kalır.
-    func price(of assetID: UUID, at date: Date) -> Decimal? {
+    func price(of assetID: UUID, at date: Date, location: UUID? = nil) -> Decimal? {
+        if let location, locationPriceHistory[HoldingPlace(assetID: assetID, locationID: location)] != nil {
+            return price(of: assetID, at: location, on: date)
+        }
         guard let asset = assets[assetID] else { return nil }
         if asset.unit == .lira { return 1 }
         guard let history = priceHistory[assetID], let earliest = history.first else { return nil }
@@ -513,6 +555,11 @@ extension PortfolioCalculator {
                 dates.insert(point.date)
             }
         }
+        for place in Set(relevant.map { HoldingPlace(assetID: $0.assetID, locationID: $0.locationID) }) {
+            for point in locationPriceHistory[place] ?? [] where point.date > begin && point.date <= now {
+                dates.insert(point.date)
+            }
+        }
 
         var state: [HoldingKey: Position] = [:]
         var transfers: [UUID: Decimal] = [:]
@@ -526,7 +573,7 @@ extension PortfolioCalculator {
             var cost: Decimal = 0
             var byCategory: [AssetCategory: Decimal] = [:]
             for (key, position) in state where position.quantity > 0 {
-                guard let price = price(of: key.assetID, at: date) else { continue }
+                guard let price = price(of: key.assetID, at: date, location: key.locationID) else { continue }
                 let holdingValue = position.quantity * price
                 value += holdingValue
                 cost += position.cost
@@ -738,12 +785,15 @@ extension PortfolioCalculator {
                 base += holding.quantity
                 continue
             }
-            guard let history = priceHistory[asset.id], let latest = history.last,
-                  let previous = Self.last(in: history, atOrBefore: startOfDay.addingTimeInterval(-1))
+            let place = HoldingPlace(assetID: asset.id, locationID: holding.key.locationID)
+            let history = (priceHistory[asset.id] ?? []) + (locationPriceHistory[place] ?? [])
+            guard let latestDate = history.map(\.date).max(), history.contains(where: { $0.date < startOfDay }),
+                  let latest = holding.price,
+                  let previous = price(of: asset.id, at: startOfDay.addingTimeInterval(-1), location: holding.key.locationID)
             else { continue }
-            if latest.date >= startOfDay { isUpdatedToday = true }
-            change += holding.quantity * (latest.price - previous.price)
-            base += holding.quantity * previous.price
+            if latestDate >= startOfDay { isUpdatedToday = true }
+            change += holding.quantity * (latest - previous)
+            base += holding.quantity * previous
         }
         guard isUpdatedToday else { return nil }
         return DailyChange(change: change, ratio: base > 0 ? change / base : nil)
@@ -751,7 +801,10 @@ extension PortfolioCalculator {
 
     /// Eldeki ürünlerin en son fiyat kaydının zamanı.
     func latestPriceDate(for filter: PersonFilter = .everyone) -> Date? {
-        holdings(for: filter).compactMap { latestPrices[$0.key.assetID]?.date }.max()
+        holdings(for: filter).flatMap { holding in
+            [latestPrices[holding.key.assetID]?.date,
+             locationPriceHistory[HoldingPlace(assetID: holding.key.assetID, locationID: holding.key.locationID)]?.last?.date]
+        }.compactMap { $0 }.max()
     }
 }
 

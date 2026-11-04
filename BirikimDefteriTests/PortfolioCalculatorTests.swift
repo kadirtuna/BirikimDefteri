@@ -871,3 +871,97 @@ struct DeletionHistoryTests {
         #expect(restores.count == 2)
     }
 }
+
+@Suite("Bozdurma değeri")
+struct RealizableValueTests {
+    private static let sampleTable = """
+    <h2 class="section-title mt-16">Gram Altın Banka Kurları</h2>
+    <table><tbody>
+    <tr><td><a href="https://altin.doviz.com/kapalicarsi/gram-altin"><img alt="x"> Kapalıçarşı</a></td>
+    <td class="text-bold" data-socket-key="20-gram-altin" data-socket-attr="bid" data-socket-animate="true">6.514,22</td>
+    <td data-socket-key="20-gram-altin" data-socket-attr="ask">6.520,55</td></tr>
+    <tr><td><a href="https://altin.doviz.com/altinkaynak/gram-altin">Altınkaynak</a></td>
+    <td data-socket-key="24-gram-altin" data-socket-attr="bid">6.467,00</td><td data-socket-attr="ask">6.615,00</td></tr>
+    <tr><td><a href="https://altin.doviz.com/akbank/gram-altin">Akbank</a></td>
+    <td data-socket-key="1-gram-altin" data-socket-attr="bid">6.333,29</td><td data-socket-attr="ask">6.554,05</td></tr>
+    <tr><td><a href="https://altin.doviz.com/ing-bank/gram-altin">ING Bank</a></td>
+    <td data-socket-key="16-gram-altin" data-socket-attr="bid">
+                6.342,26
+            </td><td data-socket-attr="ask">6.644,22</td></tr>
+    </tbody></table>
+    <table><tbody><tr><td><a href="https://altin.doviz.com/ing-bank/gumus">x</a></td>
+    <td data-socket-key="16-gumus" data-socket-attr="bid">80,00</td></tr></tbody></table>
+    """
+
+    @Test("doviz.com tablosundan kurum başına alış fiyatı okunur; sonraki tablolar karışmaz")
+    func parsesDovizTable() {
+        let bids = QuoteParser.dovizBids(Data(Self.sampleTable.utf8), key: "gram-altin")
+        #expect(bids == ["kapalicarsi": d("6514.22"), "altinkaynak": d("6467"), "akbank": d("6333.29"), "ing-bank": d("6342.26")])
+        #expect(QuoteParser.dovizBids(Data(Self.sampleTable.utf8), key: "gumus").isEmpty)
+    }
+
+    @Test("Yerin türüne ve kurumuna göre alış fiyatı seçilir")
+    func choosesBidByPlace() {
+        let tables: [BidInstrument: [String: Decimal]] = [
+            .gramGold: ["kapalicarsi": d("6514.22"), "altinkaynak": d("6467"), "akbank": d("6333.29"), "ing-bank": d("6342.26")],
+        ]
+        func bid(_ name: String, _ kind: LocationKind, xaut: Decimal? = nil) -> Decimal? {
+            BidSource.bid(for: .gramGold, at: LocationInfo(id: UUID(), name: name, kind: kind), tables: tables, xautPerGram: xaut)
+        }
+        #expect(bid("Fiziki (elde)", .physical) == d("6467"))
+        #expect(bid("ING Bank", .bank) == d("6342.26"))
+        #expect(bid("Örnek Banka", .bank) == d("6333.29"))
+        #expect(bid("Midas", .bank, xaut: d("6478.40")) == d("6446.01"))
+        #expect(bid("Midas", .bank) == nil)
+        #expect(BidSource.bid(for: .eur, at: LocationInfo(id: UUID(), name: "ING Bank", kind: .bank), tables: tables, xautPerGram: nil) == nil)
+    }
+
+    @Test("XAUT fiyatı ons başına TL'den gram başına çevrilir")
+    func parsesCoinGecko() {
+        let data = Data(#"{"tether-gold":{"try":201501}}"#.utf8)
+        #expect(QuoteParser.coinGeckoXAUT(data) == d("6478.41"))
+        #expect(QuoteParser.coinGeckoXAUT(Data("{}".utf8)) == nil)
+        #expect(QuoteKey.key(for: AssetInfo(id: UUID(), name: "XAUT", unit: .gram, category: .gold, sortOrder: 9)) == .xaut)
+        #expect(QuoteKey.key(for: Fixture.gram) == .gramGold)
+    }
+
+    @Test("Bakiye bulunduğu yerin alış fiyatıyla değerlenir, diğer yerler genel fiyatla")
+    func valuesHoldingsAtLocationBid() {
+        let calculator = PortfolioCalculator(
+            people: [Fixture.me], locations: [Fixture.home, Fixture.bank], assets: [Fixture.lira, Fixture.gram],
+            prices: [
+                PriceInfo(assetID: Fixture.gram.id, price: 3000, date: Fixture.day(10)),
+                PriceInfo(assetID: Fixture.gram.id, price: 2900, date: Fixture.day(10), locationID: Fixture.bank.id),
+            ],
+            transactions: [
+                Fixture.tx(.buy, Fixture.gram, "10", at: "2000", day: 0),
+                Fixture.tx(.buy, Fixture.gram, "5", at: "2000", location: Fixture.bank, day: 0),
+            ]
+        )
+        // 10 gr evde ₺3.000, 5 gr bankada ₺2.900.
+        #expect(calculator.summary().assets == d("44500"))
+        #expect(calculator.price(of: Fixture.gram.id) == 3000)
+        #expect(calculator.price(of: Fixture.gram.id, at: Fixture.bank.id) == 2900)
+    }
+
+    @Test("Kurum fiyatı eskiyse genel fiyata olan farkı korunur; geçmiş de bu farkla hesaplanır")
+    func keepsSpreadWhenLocationPriceIsStale() {
+        let calculator = PortfolioCalculator(
+            people: [Fixture.me], locations: [Fixture.bank], assets: [Fixture.lira, Fixture.gram],
+            prices: [
+                PriceInfo(assetID: Fixture.gram.id, price: 2000, date: Fixture.day(5)),
+                PriceInfo(assetID: Fixture.gram.id, price: 3000, date: Fixture.day(10)),
+                PriceInfo(assetID: Fixture.gram.id, price: 2900, date: Fixture.day(10), locationID: Fixture.bank.id),
+                PriceInfo(assetID: Fixture.gram.id, price: 3300, date: Fixture.day(20)),
+            ],
+            transactions: [Fixture.tx(.buy, Fixture.gram, "1", at: "2000", location: Fixture.bank, day: 0)]
+        )
+        // Genel fiyat 3000 → 3300 oldu, banka fiyatı alınamadı: 2900 × 3300 / 3000.
+        #expect(calculator.price(of: Fixture.gram.id, at: Fixture.bank.id) == 3190)
+        // Banka fiyatından önceki bir gün: 2000 × 2900 / 3000.
+        let early = calculator.price(of: Fixture.gram.id, at: Fixture.day(6), location: Fixture.bank.id)
+        #expect(early == Decimal(2000) * 2900 / 3000)
+        #expect(calculator.price(of: Fixture.gram.id, at: Fixture.day(12), location: Fixture.bank.id) == 2900)
+        #expect(calculator.valueHistory(since: Fixture.day(20), now: Fixture.day(25)).last?.value == 3190)
+    }
+}

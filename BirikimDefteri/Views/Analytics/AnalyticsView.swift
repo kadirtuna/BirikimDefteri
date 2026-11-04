@@ -324,7 +324,8 @@ private struct PerformanceRow: View {
     var body: some View {
         let assetID: UUID? = if case .asset(let id) = group.key { id } else { nil }
         let asset = assetID.flatMap { ledger.calculator.assets[$0] }
-        let price = assetID.flatMap(ledger.calculator.price(of:))
+        // Bugünkü değer, bakiyelerin durduğu yerlerin alış fiyatlarının ortalamasıdır.
+        let price = group.quantity.flatMap { $0 > 0 && group.value > 0 ? group.value / $0 : nil }
         let averageCost = group.quantity.flatMap { $0 > 0 ? group.cost / $0 : nil }
 
         HStack(spacing: 12) {
