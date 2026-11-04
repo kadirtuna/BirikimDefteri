@@ -900,6 +900,21 @@ struct RealizableValueTests {
         #expect(QuoteParser.dovizBids(Data(Self.sampleTable.utf8), key: "gumus").isEmpty)
     }
 
+    @Test("Tablodan kurum adı, alış ve satış okunur; kuyumcu ve Midas satırları türetilir")
+    func buildsBoardQuotes() {
+        let quotes = QuoteParser.dovizQuotes(Data(Self.sampleTable.utf8), key: "gram-altin")
+        #expect(quotes["ing-bank"] == InstitutionQuote(name: "ING Bank", bid: d("6342.26"), ask: d("6644.22")))
+        #expect(quotes["kapalicarsi"]?.name == "Kapalıçarşı")
+        let board = PriceBoard(date: .now, tables: [.gramGold: quotes], xautPerGram: d("6478.40"))
+        #expect(board.quote(.gramGold, slug: WidgetPlaces.dealersSlug) == InstitutionQuote(
+            name: "Kuyumcu (en düşük alış)", bid: d("6467"), ask: d("6520.55")))
+        #expect(board.quote(.gramGold, slug: PriceBoard.midasSlug)?.bid == d("6446.01"))
+        #expect(board.quote(.gramGold, slug: PriceBoard.midasSlug)?.ask == d("6510.79"))
+        #expect(board.quote(.eur, slug: PriceBoard.midasSlug) == nil)
+        #expect(BidSource.slug(for: LocationInfo(id: UUID(), name: "ING Bank", kind: .bank)) == "ing-bank")
+        #expect(BidSource.slug(for: LocationInfo(id: UUID(), name: "Kasa", kind: .physical)) == WidgetPlaces.dealersSlug)
+    }
+
     @Test("Yerin türüne ve kurumuna göre alış fiyatı seçilir")
     func choosesBidByPlace() {
         let tables: [BidInstrument: [String: Decimal]] = [

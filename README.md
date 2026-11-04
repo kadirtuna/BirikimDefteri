@@ -71,6 +71,7 @@
 - **Debts:** loans, credit cards and others; grouped by institution with per-type subtotals and total monthly installments. Each debt keeps a payment history, a progress ring and an estimated payoff date, and local notifications remind you of card due dates and installment days.
 - **Fast entry:** amounts are grouped as you type (1.234,50), new records start with the last person and location, and any record can be repeated with today's date from a swipe or a long-press menu (edit, repeat, transfer, delete). Records are searchable and each month shows its total buys and sells.
 - **Nothing is lost:** every change to transactions, transfers, debts and payments is logged and can be undone. Deletions (including goals, people, locations and products with their price history) and backup restores are kept forever under Deleted and can be brought back at any time; a restore can itself be undone.
+- **Institution prices and widget:** the Prices screen lists buy and sell prices for gold, silver, USD and EUR at every bank and big dealer, your own places first. A home and lock screen widget shows the same for your places (or the ones you pick), refreshes itself every 30 minutes and never shows your amounts.
 - **Siri and Shortcuts:** "Birikim Defteri ile alım ekle" adds a buy or sell without opening the app, using the last person and location and the current price. Works from the Shortcuts app and the Action button.
 - **Security:** mandatory Face ID lock with device passcode fallback. Content is hidden in the app switcher, and an eye button hides all amounts when someone is looking.
 - **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
@@ -87,9 +88,9 @@
 | Charts | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Domain logic | Pure Swift `PortfolioCalculator`, independent of SwiftUI and unit tested |
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
-| System | UserNotifications (local reminders), App Intents (Siri, Shortcuts), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
+| System | WidgetKit (configurable widget), UserNotifications (local reminders), App Intents (Siri, Shortcuts), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 57 tests in 19 suites |
+| Tests | Swift Testing: 58 tests in 19 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -136,6 +137,7 @@ BirikimDefteri/
 ├── Models/          SwiftData models, Ledger, change journal, JSON backup, CSV export, reminders, price updater, auto backup, demo data
 ├── Views/           Summary, Transactions, Debts, Prices, Settings, Analytics; icons and theme
 └── Assets.xcassets  App icon, logo, colors
+BirikimDefteriWidget/ Widget extension; shares Core/ and the local logo catalog with the app
 BirikimDefteriTests/ Swift Testing unit tests
 scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups), fetch-logos.py (local bank logos), app-icon.swift (app icon)
 docs/                README images
@@ -190,7 +192,7 @@ Each run:
 - reinstalls the app over Wi-Fi or cable if the signature expires within 48 hours,
 - reports the result with a Mac notification.
 
-Each install fetches a fresh 7-day profile and keeps the app's data. The iPhone only needs to be on the same network as the Mac. The log is at `~/Library/Logs/BirikimDefteri/auto-install.log`; remove the job with `--disable`.
+Each install fetches fresh 7-day profiles for the app and its widget and keeps the app's data. Free accounts cannot use App Groups, so the app and the widget share prices through a keychain access group (`*.entitlements`). The iPhone only needs to be on the same network as the Mac. The log is at `~/Library/Logs/BirikimDefteri/auto-install.log`; remove the job with `--disable`.
 
 ### Backup and restore
 
@@ -217,6 +219,8 @@ To launch with demo data in the Simulator (Debug builds only; replaces existing 
 ```bash
 xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 ```
+
+Other Debug-only launch arguments: `-startTab prices` (or `records`, `debts`, `settings`), `-expandInstitutions YES`, and `-widgetPreview YES`, which draws every widget size with the last saved prices.
 
 ### License
 
@@ -250,6 +254,7 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 - **Borçlar:** kredi, kredi kartı ve diğer; kuruma göre gruplama, türe göre ara toplamlar, aylık taksit toplamı. Her borcun ödeme geçmişi, ödenen kısmı gösteren halkası ve tahmini bitiş tarihi tutulur; kart son ödeme ve taksit günleri yerel bildirimle hatırlatılır.
 - **Hızlı kayıt:** tutarlar yazılırken binlik ayraçla gösterilir (1.234,50), yeni kayıtta son kişi ve yer hazır gelir, bir kayıt kaydırarak ya da uzun basma menüsünden (Düzenle, Tekrarla, Aktar, Sil) bugünün tarihiyle tekrarlanır. Kayıtlarda arama var; ay başlıklarında o ayın toplam alım ve satımı yazar.
 - **Hiçbir şey kaybolmaz:** işlem, aktarım, borç ve ödemelerdeki her değişiklik kaydedilir ve geri alınabilir. Silmeler (hedef, kişi, yer ve fiyat geçmişiyle ürünler dahil) ve yedekten geri yüklemeler Silinenler'de hep kalır, istendiğinde geri getirilir; geri yükleme de geri alınabilir.
+- **Kurum fiyatları ve widget:** Fiyatlar ekranında altın, gümüş, dolar ve euro için bütün banka ve kuyumcuların alış ve satış fiyatları listelenir; önce sizin yerleriniz. Ana ekran ve kilit ekranı widget'ı aynısını sizin yerleriniz (ya da seçtikleriniz) için gösterir, yarım saatte bir kendini yeniler ve tutarlarınızı göstermez.
 - **Siri ve Kısayollar:** "Birikim Defteri ile alım ekle" ile uygulamayı açmadan alım ya da satım eklenir; son kişi ve yer, güncel fiyat kullanılır. Kısayollar uygulamasında ve Eylem düğmesinde de çalışır.
 - **Güvenlik:** zorunlu Face ID kilidi, cihaz şifresi yedekli. Uygulama değiştiricide içerik gizlenir; göz düğmesiyle yanınızda biri varken bütün tutarlar gizlenir.
 - **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
@@ -266,9 +271,9 @@ xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 | Grafikler | Swift Charts: `SectorMark`, `AreaMark`, `LineMark`, `BarMark`, `RuleMark`, `chartXSelection` |
 | Hesaplama | Saf Swift `PortfolioCalculator`; SwiftUI'dan bağımsız, birim testli |
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
-| Sistem | UserNotifications (yerel hatırlatmalar), App Intents (Siri, Kısayollar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
+| Sistem | WidgetKit (ayarlanabilir widget), UserNotifications (yerel hatırlatmalar), App Intents (Siri, Kısayollar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
 | Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 57 test, 19 grup |
+| Test | Swift Testing: 58 test, 19 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -315,6 +320,7 @@ BirikimDefteri/
 ├── Models/          SwiftData modelleri, Ledger, değişiklik günlüğü, yedek (JSON), CSV dışa aktarma, hatırlatmalar, fiyat güncelleyici, otomatik yedek, örnek veri
 ├── Views/           Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz; simgeler ve tema
 └── Assets.xcassets  Uygulama simgesi, logo, renkler
+BirikimDefteriWidget/ Widget eklentisi; Core/ klasörünü ve yerel logo kataloğunu uygulamayla paylaşır
 BirikimDefteriTests/ Swift Testing birim testleri
 scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek), fetch-logos.py (yerel banka logoları), app-icon.swift (uygulama simgesi)
 docs/                README görselleri
@@ -369,7 +375,7 @@ Görev her çalıştığında:
 - imzanın bitmesine 48 saatten az kaldıysa uygulamayı kablosuz ya da kabloyla yeniden yükler,
 - sonucu Mac bildirimiyle haber verir.
 
-Yükleme her seferinde yeni bir 7 günlük profil alır; veriler silinmez. Telefonun Mac ile aynı ağda olması yeterli. Kayıt `~/Library/Logs/BirikimDefteri/auto-install.log` dosyasında; kaldırmak için `--disable`.
+Yükleme her seferinde uygulama ve widget için yeni 7 günlük profiller alır; veriler silinmez. Ücretsiz hesap App Group'a izin vermediği için uygulama ile widget fiyatları ortak bir Anahtar Zinciri grubunda paylaşır (`*.entitlements`). Telefonun Mac ile aynı ağda olması yeterli. Kayıt `~/Library/Logs/BirikimDefteri/auto-install.log` dosyasında; kaldırmak için `--disable`.
 
 ### Yedekleme ve geri yükleme
 
@@ -396,6 +402,8 @@ Paralel test, her çalıştırmada simülatörün bir kopyasını oluşturup dis
 ```bash
 xcrun simctl launch booted com.kadirtuna.birikimdefteri -demoData
 ```
+
+Yalnızca Debug derlemede çalışan diğer açılış argümanları: `-startTab prices` (ya da `records`, `debts`, `settings`), `-expandInstitutions YES` ve widget'ın bütün boyutlarını son kaydedilen fiyatlarla çizen `-widgetPreview YES`.
 
 ### Lisans
 

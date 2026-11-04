@@ -91,7 +91,8 @@ echo "  Takım: $TEAM_ID"
 for profile in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"/*.mobileprovision; do
     [[ -f "$profile" ]] || continue
     name="$(security cms -D -i "$profile" 2>/dev/null | plutil -extract Name raw -o - - 2>/dev/null || true)"
-    if [[ "$name" == "iOS Team Provisioning Profile: $BUNDLE_ID" ]]; then
+    # Uygulamanın ve widget'ın ($BUNDLE_ID.widget) profilleri birlikte yenilenir.
+    if [[ "$name" == "iOS Team Provisioning Profile: $BUNDLE_ID" || "$name" == "iOS Team Provisioning Profile: $BUNDLE_ID."* ]]; then
         rm -f "$profile"
     fi
 done

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import WidgetKit
 
 /// Güncel fiyatları internetten çeker: altın ve gümüş Truncgil Finans'tan (Kapalıçarşı alış fiyatı),
 /// dolar ve euro TCMB döviz alış kurundan, XAUT CoinGecko'dan. Bakiyelerin durduğu yerler için ayrıca
@@ -12,7 +13,6 @@ final class PriceUpdater {
     private static let lastUpdateKey = "lastPriceUpdate"
     private static let goldURL = URL(string: "https://finans.truncgil.com/today.json")!
     private static let currencyURL = URL(string: "https://www.tcmb.gov.tr/kurlar/today.xml")!
-    private static let xautURL = URL(string: "https://api.coingecko.com/api/v3/simple/price?ids=tether-gold&vs_currencies=try")!
 
     enum Status: Equatable {
         case idle
@@ -23,6 +23,8 @@ final class PriceUpdater {
 
     private(set) var status: Status = .idle
     private(set) var lastUpdate: Date? = UserDefaults.standard.object(forKey: PriceUpdater.lastUpdateKey) as? Date
+    /// Kurumların son alış ve satış fiyatları (Fiyatlar ekranı ve widget için).
+    private(set) var board: PriceBoard? = SharedStore.load(PriceBoard.self, key: SharedStore.boardKey)
 
     var isUpdating: Bool { status == .updating }
 
@@ -40,12 +42,14 @@ final class PriceUpdater {
         guard !isUpdating else { return }
         status = .updating
         async let fetchedQuotes = Self.fetchQuotes()
-        async let fetchedTables = Self.fetchBidTables()
-        let (quotes, tables) = await (fetchedQuotes, fetchedTables)
+        async let fetchedBoard = PriceBoard.fetch()
+        var (quotes, fetched) = await (fetchedQuotes, fetchedBoard)
         guard !quotes.isEmpty else {
             status = .failed("Fiyatlar alınamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.")
             return
         }
+        if let xaut = fetched?.xautPerGram { quotes[.xaut] = xaut }
+        let tables = (fetched?.tables ?? [:]).mapValues { $0.mapValues(\.bid) }
         let infos = prices.map(\.info)
         let latest = Dictionary(grouping: infos.filter { $0.locationID == nil }, by: \.assetID)
             .compactMapValues { $0.max { $0.date < $1.date }?.price }
@@ -74,6 +78,17 @@ final class PriceUpdater {
             else { continue }
             context.insert(PricePoint(assetID: place.assetID, price: bid, date: now, locationID: place.locationID))
         }
+        if let fetched {
+            // Alınamayan tablolar için bir önceki tablo korunur.
+            var merged = board ?? fetched
+            merged.date = fetched.date
+            merged.tables.merge(fetched.tables) { _, new in new }
+            merged.xautPerGram = fetched.xautPerGram ?? merged.xautPerGram
+            board = merged
+            SharedStore.save(merged, key: SharedStore.boardKey)
+        }
+        Self.saveWidgetPlaces(ledger, reload: false)
+        WidgetCenter.shared.reloadAllTimelines()
         try? context.save()
         lastUpdate = now
         UserDefaults.standard.set(now, forKey: Self.lastUpdateKey)
@@ -83,33 +98,29 @@ final class PriceUpdater {
     private nonisolated static func fetchQuotes() async -> [QuoteKey: Decimal] {
         async let gold = fetchGold()
         async let currency = try? fetch(currencyURL)
-        async let xaut = try? fetch(xautURL)
         var quotes = await gold
         if let data = await currency {
             quotes.merge(QuoteParser.tcmb(data)) { _, official in official }
         }
-        if let data = await xaut, let price = QuoteParser.coinGeckoXAUT(data) {
-            quotes[.xaut] = price
-        }
         return quotes
     }
 
-    /// Yere özel fiyatların karşılaştırma tabloları; alınamayan tablo boş kalır, o yerlerde son fiyat farkı korunur.
-    private nonisolated static func fetchBidTables() async -> [BidInstrument: [String: Decimal]] {
-        await withTaskGroup(of: (BidInstrument, [String: Decimal]).self) { group in
-            for instrument in BidInstrument.allCases {
-                group.addTask {
-                    let page = instrument.page
-                    guard let data = try? await fetch(page.url) else { return (instrument, [:]) }
-                    return (instrument, QuoteParser.dovizBids(data, key: page.key))
-                }
-            }
-            var tables: [BidInstrument: [String: Decimal]] = [:]
-            for await (instrument, table) in group where !table.isEmpty {
-                tables[instrument] = table
-            }
-            return tables
+    /// Widget'ın varsayılan kurumları: her ürün için o ürünün bulunduğu yerler, değere göre büyükten küçüğe.
+    /// Değiştiyse kaydeder ve `reload` açıksa widget'ı yeniler.
+    static func saveWidgetPlaces(_ ledger: Ledger, reload: Bool = true) {
+        let calculator = ledger.calculator
+        var places: [BidInstrument: [String]] = [:]
+        for holding in calculator.holdings().sorted(by: { ($0.value ?? 0) > ($1.value ?? 0) }) {
+            guard let asset = calculator.assets[holding.key.assetID], let key = QuoteKey.key(for: asset),
+                  let instrument = BidInstrument(key), let location = calculator.locations[holding.key.locationID],
+                  let slug = BidSource.slug(for: location), !(places[instrument] ?? []).contains(slug)
+            else { continue }
+            places[instrument, default: []].append(slug)
         }
+        let new = WidgetPlaces(places: places)
+        guard SharedStore.load(WidgetPlaces.self, key: SharedStore.placesKey)?.places != new.places else { return }
+        SharedStore.save(new, key: SharedStore.placesKey)
+        if reload { WidgetCenter.shared.reloadAllTimelines() }
     }
 
     /// Truncgil akışı ara sıra yarıda kesildiği için eksik gelirse birkaç kez dener, en dolu yanıtı kullanır.

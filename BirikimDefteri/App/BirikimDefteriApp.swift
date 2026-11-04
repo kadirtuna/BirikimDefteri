@@ -32,8 +32,17 @@ struct BirikimDefteriApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "widgetPreview") {
+                WidgetPreviewScreen()
+            } else {
+                RootView()
+                    .environment(\.locale, Format.locale)
+            }
+            #else
             RootView()
                 .environment(\.locale, Format.locale)
+            #endif
         }
         .modelContainer(container)
     }

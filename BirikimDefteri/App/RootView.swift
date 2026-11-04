@@ -7,7 +7,22 @@ enum AppTab: Hashable {
 
 @Observable
 final class AppRouter {
-    var tab: AppTab = .summary
+    var tab: AppTab = AppRouter.initialTab
+
+    /// Debug derlemede `-startTab prices` gibi bir açılış argümanıyla başlangıç sekmesi seçilebilir (ekran görüntüleri için).
+    private static var initialTab: AppTab {
+        #if DEBUG
+        switch UserDefaults.standard.string(forKey: "startTab") {
+        case "records": return .records
+        case "debts": return .debts
+        case "prices": return .prices
+        case "settings": return .settings
+        default: return .summary
+        }
+        #else
+        return .summary
+        #endif
+    }
 }
 
 extension EnvironmentValues {
@@ -79,6 +94,7 @@ struct RootView: View {
             lock.scenePhaseChanged(to: phase)
             if phase == .active || phase == .background {
                 AutoBackup.saveIfChanged(ledger)
+                PriceUpdater.saveWidgetPlaces(ledger)
             }
             if phase == .active, autoUpdatePrices {
                 Task { await priceUpdater.updateIfStale(assets: assets, prices: prices, context: context) }

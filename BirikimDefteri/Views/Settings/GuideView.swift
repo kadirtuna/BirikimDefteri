@@ -259,6 +259,7 @@ enum GuideContent {
                     .init(title: "İnternetten güncelleme", text: "Altın ve gümüş Truncgil Finans'tan (Kapalıçarşı alış fiyatı), dolar ve euro TCMB döviz alış kurundan, XAUT CoinGecko'dan alınır. Ayrıca varlıklarınızın durduğu her kurumun alış fiyatı doviz.com'un banka ve kuyumcu tablolarından çekilir. Güncelle düğmesi ya da listeyi aşağı çekmek fiyatları yeniler. Ayarlar'da otomatik güncelleme açıksa uygulama, son güncellemenin üzerinden bir saat geçtiyse açılışta kendiliğinden yeniler."),
                     .init(title: "Elle fiyat", text: "Yeni değeri yazıp sağ üstteki Kaydet'e dokunun; yalnızca değiştirdiğiniz fiyatlar kaydedilir. Fon gibi otomatik olmayan ürünlerin fiyatını siz girersiniz. Otomatik ürünlerde elle girdiğiniz fiyat bir sonraki internet güncellemesine kadar geçerlidir."),
                     .init(title: "Bozdurma değeri", text: "Gösterilen tutar, bozdursanız elinize geçecek tutardan fazla olmasın diye her varlık durduğu yerin alış fiyatıyla değerlenir. Bankadaki altın, gümüş, dolar ve euro o bankanın alış fiyatıyla; fiziki gram altın ve döviz büyük kuyumcu ve döviz bürolarının (Kapalıçarşı, Altınkaynak, Harem, Odacı, Venüs) en düşük alışıyla; Midas'taki altın XAUT piyasa fiyatından en yüksek satış komisyonu (%0,20) ve %0,30 fiyat farkı payı düşülerek değerlenir. Tanınmayan bir bankada bütün bankaların en düşük alışı kullanılır. Çeyrek, yarım gibi sikkelerde kuyumcu alış fiyatı kullanılır; eski basım sikkeler biraz daha düşük alınabilir."),
+                    .init(title: "Kurumların alış ve satışı", text: "Fiyatlar ekranındaki bu bölümde altın, gümüş, dolar ve euro için önce varlıklarınızın durduğu yerlerin alış ve satış fiyatları, altında bütün banka ve kuyumcular en yüksek alıştan sıralı görünür. Alış, kurumun sizden alacağı fiyattır (bozdururken eline geçen); satış, size satacağı fiyattır. Makas, ikisi arasındaki farktır. Midas'ın fiyatı XAUT piyasa fiyatından tahmin edilir."),
                     .init(title: "Kurum fiyatı alınamazsa", text: "Bir kurumun fiyatı o an alınamazsa son bilinen alış farkı korunur, değer genel fiyata kaymaz. Fiyatlar ekranında her ürünün altında bulunduğu yerlerin alış fiyatları yeşil olarak yazar. Piyasa son güncellemeden sonra düşerse eline geçecek tutar da düşer; güncelleme saati Özet'te yazar."),
                     .init(title: "Piyasa değişimi", text: "Her ürünün altında son 30 günün küçük fiyat grafiği ve değişim rozeti (yükselişte yeşil, düşüşte kırmızı) görünür. Ürün ayrıntısındaki Fiyat geçmişi bölümü, kaydedilen fiyatlara göre piyasanın değişimini gösterir; bu, sizin alış maliyetinize göre getiriden ayrıdır."),
                 ]
@@ -279,14 +280,15 @@ enum GuideContent {
         ]),
         GuideSection(title: "iPhone ile", topics: [
             GuideTopic(
-                title: "Siri ve Kısayollar",
+                title: "Siri, Kısayollar ve widget",
                 symbol: "waveform",
                 tint: .indigo,
-                summary: "Uygulamayı açmadan sesle ya da tek dokunuşla alım veya satım ekleme.",
-                location: "Siri, Kısayollar uygulaması, Eylem düğmesi",
+                summary: "Uygulamayı açmadan sesle alım ekleme; ana ekranda kurumların altın fiyatları.",
+                location: "Siri, Kısayollar uygulaması, Eylem düğmesi, ana ekran",
                 items: [
                     .init(title: "Siri ile", text: "\"Birikim Defteri ile alım ekle\" ya da \"Birikim Defteri ile Gram altın ekle\" deyin. Siri miktarı sorar; ürünü söylemediyseniz onu da sorar. Kayıt son kullandığınız kişi ve yerle, güncel fiyattan eklenir."),
                     .init(title: "Kısayollar uygulamasında", text: "Alım ya da satım ekle eylemiyle ürün, miktar, işlem türü, birim fiyat, yer ve kişiyi önceden belirleyen bir kısayol kurabilirsiniz; örneğin her ay aynı miktarda altın alıyorsanız tek dokunuşla eklenir. Kısayolu ana ekrana ya da Eylem düğmesine atayabilirsiniz."),
+                    .init(title: "Widget", text: "Ana ekrana ya da kilit ekranına Birikim Defteri'nin Kurum fiyatları widget'ını ekleyin. Varsayılan olarak altınlarınızın durduğu yerlerin alış ve satış fiyatlarını gösterir; büyük boyda altına en iyi alış veren diğer kurumlar eklenir. Widget'a uzun basıp Düzenle'ye dokunarak ürünü (altın, gümüş, dolar, euro) ve kurumları değiştirebilirsiniz. Widget fiyatları yarım saatte bir kendisi yeniler; tutarlarınızı göstermez."),
                     .init(title: "Güvenlik", text: "Eylem yalnızca iPhone'un kilidi açıkken çalışır. Elde olandan fazla satış uygulamadaki gibi engellenir. Eklenen kayıt İşlem geçmişi'ne yazılır, notunda \"Kısayollar ile eklendi\" yazar ve geri alınabilir."),
                 ]
             ),

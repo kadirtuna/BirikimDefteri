@@ -3,8 +3,26 @@ import Foundation
 /// Yere özel alış fiyatı: bir bakiyeyi bozdurduğunuzda eline geçecek birim fiyat.
 /// Kaynak doviz.com'un banka ve kuyumcu karşılaştırma tablolarıdır; her tablo bir ürün için bütün kurumların
 /// alış fiyatlarını verir. Midas'taki altın XAUT piyasa fiyatından satış kesintileri düşülerek değerlenir.
-enum BidInstrument: String, CaseIterable, Sendable {
+enum BidInstrument: String, CaseIterable, Codable, Sendable {
     case gramGold, silver, usd, eur
+
+    var title: String {
+        switch self {
+        case .gramGold: "Gram altın"
+        case .silver: "Gümüş"
+        case .usd: "Dolar"
+        case .eur: "Euro"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .gramGold: "Altın"
+        case .silver: "Gümüş"
+        case .usd: "Dolar"
+        case .eur: "Euro"
+        }
+    }
 
     /// Ürünün genel fiyat anahtarından yere özel fiyat türü. Çeyrek, bilezik gibi kuyumcu ürünleri
     /// genel fiyatta zaten kuyumcu alış fiyatıyla tutulduğu için burada yoktur.
@@ -61,11 +79,19 @@ enum BidSource {
                 guard instrument == .gramGold, let xautPerGram else { return nil }
                 return rounded(xautPerGram * xautDiscount)
             }
-            if let id = institution?.id, let slug = institutions.first(where: { $0.value == id })?.key, let bid = table[slug] {
+            if let slug = slug(for: location), let bid = table[slug] {
                 return bid
             }
             return table.filter { !dealers.contains($0.key) }.values.min()
         }
+    }
+
+    /// Yerin fiyat tablosundaki kısaltması: tanınan banka, Midas ya da fiziki yer için kuyumcular.
+    static func slug(for location: LocationInfo) -> String? {
+        if location.kind == .physical { return WidgetPlaces.dealersSlug }
+        guard let id = Institution.match(location.name)?.id else { return nil }
+        if id == "midas" { return PriceBoard.midasSlug }
+        return institutions.first { $0.value == id }?.key
     }
 
     static func rounded(_ value: Decimal) -> Decimal {
@@ -79,23 +105,37 @@ enum BidSource {
 extension QuoteParser {
     /// doviz.com karşılaştırma sayfasındaki ilk tablodan kurum başına alış fiyatlarını okur: [kurum adı: alış].
     static func dovizBids(_ data: Data, key: String) -> [String: Decimal] {
+        dovizQuotes(data, key: key).mapValues(\.bid)
+    }
+
+    /// doviz.com karşılaştırma sayfasındaki ilk tablodan kurum başına ad, alış ve satış fiyatını okur.
+    static func dovizQuotes(_ data: Data, key: String) -> [String: InstitutionQuote] {
         guard let html = String(data: data, encoding: .utf8),
               let start = html.range(of: "<tbody>"),
               let end = html.range(of: "</tbody>", range: start.upperBound..<html.endIndex)
         else { return [:] }
         let table = String(html[start.upperBound..<end.lowerBound])
         let escaped = NSRegularExpression.escapedPattern(for: key)
-        let pattern = "doviz\\.com/([a-z0-9-]+)/[^\"]*\"[\\s\\S]*?data-socket-key=\"\\d+-\(escaped)\" data-socket-attr=\"bid\"[^>]*>\\s*([0-9.,]+)\\s*<"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [:] }
-        var result: [String: Decimal] = [:]
+        let pattern = "doviz\\.com/([a-z0-9-]+)/[^\"]*\"[^>]*>([\\s\\S]*?)</a>[\\s\\S]*?data-socket-key=\"\\d+-\(escaped)\" data-socket-attr=\"bid\"[^>]*>\\s*([0-9.,]+)\\s*<"
+        let askPattern = "data-socket-attr=\"ask\"[^>]*>\\s*([0-9.,]+)\\s*<"
+        guard let regex = try? NSRegularExpression(pattern: pattern), let askRegex = try? NSRegularExpression(pattern: askPattern)
+        else { return [:] }
+        var result: [String: InstitutionQuote] = [:]
         for row in table.components(separatedBy: "<tr>") {
             let range = NSRange(row.startIndex..., in: row)
             guard let match = regex.firstMatch(in: row, range: range),
                   let slugRange = Range(match.range(at: 1), in: row),
-                  let bidRange = Range(match.range(at: 2), in: row),
+                  let nameRange = Range(match.range(at: 2), in: row),
+                  let bidRange = Range(match.range(at: 3), in: row),
                   let bid = turkishNumber(String(row[bidRange])), bid > 0
             else { continue }
-            result[String(row[slugRange])] = bid
+            let name = row[nameRange].replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let ask = askRegex.firstMatch(in: row, range: range)
+                .flatMap { Range($0.range(at: 1), in: row) }
+                .flatMap { turkishNumber(String(row[$0])) }
+            let slug = String(row[slugRange])
+            result[slug] = InstitutionQuote(name: name.isEmpty ? slug : name, bid: bid, ask: ask)
         }
         return result
     }

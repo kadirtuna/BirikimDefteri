@@ -26,6 +26,8 @@ struct PricesView: View {
                     } footer: {
                         Text("Altın ve gümüş: Truncgil Finans (Kapalıçarşı alış fiyatı). Dolar ve euro: TCMB döviz alış kuru. XAUT: CoinGecko piyasa fiyatı. Yalnızca fiyat indirilir, verileriniz cihazdan çıkmaz.")
                     }
+
+                    InstitutionPricesSection(board: updater.board)
                 }
 
                 Section {
