@@ -12,9 +12,12 @@
 #
 # Uygulama verileri yeniden yüklemede silinmez. Başarılı yüklemeden sonra imzanın bitiş
 # tarihi build/installed-profile-expiry dosyasına yazılır.
+#
+# Çıkış kodları: 0 tamam, 3 Xcode'da Apple hesabı yok, 4 iPhone bulunamadı ya da ulaşılamadı, 1 diğer.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+source scripts/lib.sh
 
 SCHEME="BirikimDefteri"
 BUNDLE_ID="com.kadirtuna.birikimdefteri"
@@ -25,9 +28,15 @@ STATE="build/installed-profile-expiry"
 
 step() { printf '\n\033[1;32m▸ %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+fail_with() { local code="$1"; shift; printf '\n\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit "$code"; }
 
 command -v xcodebuild >/dev/null || fail "Xcode bulunamadı. App Store'dan Xcode'u kurun."
 mkdir -p build
+
+# Hesap yoksa imza zaten alınamaz; telefonu aramadan ve önbellekteki profili silmeden açık bir mesajla dur.
+account_state=0
+xcode_account_state || account_state=$?
+(( account_state != 1 )) || fail_with "$EXIT_NO_ACCOUNT" "$NO_ACCOUNT_HELP"
 
 # 1. Cihaz
 step "Bağlı iPhone aranıyor"
@@ -57,7 +66,7 @@ PY
 )"
 
 if [[ -z "$device_line" ]]; then
-    fail "Bağlı iPhone bulunamadı.
+    fail_with "$EXIT_UNREACHABLE" "Bağlı iPhone bulunamadı.
   1. iPhone'u kabloyla Mac'e takın ve kilidini açın.
   2. iPhone'da 'Bu Bilgisayara Güvenilsin mi?' sorusuna Güven deyin.
   3. Xcode > Window > Devices and Simulators'da iPhone'un göründüğünü kontrol edin.
@@ -72,7 +81,7 @@ fi
 echo "  $DEVICE_NAME ($DEVICE_UDID)"
 echo "$DEVICE_UDID" >build/device-udid
 xcrun devicectl --timeout 30 device info lockState --device "$DEVICE_UDID" >/dev/null 2>&1 \
-    || fail "$DEVICE_NAME cihazına ulaşılamıyor. Kabloyla bağlayın ya da Mac ile aynı Wi-Fi'de olduğundan emin olun."
+    || fail_with "$EXIT_UNREACHABLE" "$DEVICE_NAME cihazına ulaşılamıyor. Kilidini açıp Mac ile aynı Wi-Fi'de tutun ya da kabloyla bağlayın."
 
 # 2. İmza takımı
 step "İmza kimliği okunuyor"
@@ -85,6 +94,7 @@ fi
   Xcode > Settings > Apple Accounts'ta Apple hesabınızı ekleyin, ardından
   Manage Certificates… > + > Apple Development ile sertifika oluşturun."
 echo "  Takım: $TEAM_ID"
+
 
 # Xcode, süresi dolmamış profili yeniden kullanır; o zaman yükleme süreyi uzatmaz. Önbellekteki
 # profil silinince 7 günlük yenisini üretir. Cihazdaki uygulama bundan etkilenmez.
@@ -105,6 +115,7 @@ if ! xcodebuild -project BirikimDefteri.xcodeproj -scheme "$SCHEME" -configurati
     DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
     build >"$LOG" 2>&1; then
     grep -E "error:" "$LOG" | sort -u | head -20 >&2 || true
+    grep -q "No Accounts" "$LOG" && fail_with "$EXIT_NO_ACCOUNT" "$NO_ACCOUNT_HELP"
     fail "Derleme başarısız. Ayrıntılar: $LOG"
 fi
 APP="$BUILD_DIR/Build/Products/$CONFIGURATION-iphoneos/BirikimDefteri.app"

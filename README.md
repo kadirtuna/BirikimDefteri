@@ -112,11 +112,11 @@ flowchart LR
     end
     TR["Truncgil Finans<br/>gold · silver"] --> PU
     TC["TCMB<br/>USD · EUR"] --> PU
-    subgraph Mac["Mac (launchd, twice a day)"]
+    subgraph Mac["Mac (launchd, hourly)"]
         AI["auto-install.sh"]
     end
     AB -- "devicectl copy" --> AI --> IC[("iCloud Drive<br/>Birikim Defteri Yedekleri")]
-    AI -- "reinstall when signing<br/>expires within 48 h" --> Device
+    AI -- "reinstall when signing<br/>expires within 72 h" --> Device
 ```
 
 Views read a `Ledger` value, built from SwiftData queries, from the environment. All of the following lives in `PortfolioCalculator`, which knows nothing about SwiftUI:
@@ -181,7 +181,7 @@ For your own copy, change `PRODUCT_BUNDLE_IDENTIFIER`. To run from Xcode, pick y
 
 ### Free signing lasts 7 days
 
-With a free account, the app's signature expires after 7 days. This installs a launchd job that runs every day at 09:00 and 20:30:
+With a free account, the app's signature expires after 7 days. This installs a launchd job that runs every hour:
 
 ```bash
 ./scripts/auto-install.sh --enable
@@ -189,8 +189,8 @@ With a free account, the app's signature expires after 7 days. This installs a l
 
 Each run:
 - pulls new backups from the iPhone to iCloud Drive,
-- reinstalls the app over Wi-Fi or cable if the signature expires within 48 hours,
-- reports the result with a Mac notification.
+- reinstalls the app over Wi-Fi or cable if the signature expires within 72 hours (an iPhone asleep on Wi-Fi often does not answer, hence the hourly retries),
+- reports the result with a Mac notification that names the cause: Xcode signed out of your Apple account, iPhone unreachable, or a build error. If Xcode is signed out it warns days before the signature runs out, because a new free signature needs that account. Each warning repeats at most every few hours.
 
 Each install fetches fresh 7-day profiles for the app and its widget and keeps the app's data. Free accounts cannot use App Groups, so the app and the widget share prices through a keychain access group (`*.entitlements`). The iPhone only needs to be on the same network as the Mac. The log is at `~/Library/Logs/BirikimDefteri/auto-install.log`; remove the job with `--disable`.
 
@@ -295,11 +295,11 @@ flowchart LR
     end
     TR["Truncgil Finans<br/>altın · gümüş"] --> PU
     TC["TCMB<br/>USD · EUR"] --> PU
-    subgraph Mac["Mac (launchd, günde 2 kez)"]
+    subgraph Mac["Mac (launchd, saatte bir)"]
         AI["auto-install.sh"]
     end
     AB -- "devicectl copy" --> AI --> IC[("iCloud Drive<br/>Birikim Defteri Yedekleri")]
-    AI -- "imza 48 saat kala<br/>yeniden yükle" --> Cihaz
+    AI -- "imza 72 saat kala<br/>yeniden yükle" --> Cihaz
 ```
 
 Görünümler, SwiftData sorgularından kurulan `Ledger` değerini ortamdan (environment) okur. Aşağıdakilerin hepsi SwiftUI'ı hiç bilmeyen `PortfolioCalculator` içindedir:
@@ -364,7 +364,7 @@ Kendi kopyanız için `PRODUCT_BUNDLE_IDENTIFIER` değerini değiştirin. Xcode'
 
 ### Ücretsiz imzanın 7 günlük süresi
 
-Ücretsiz hesapla imza 7 gün geçerli. Aşağıdaki komut, her gün 09:00 ve 20:30'da çalışan bir launchd görevi kurar:
+Ücretsiz hesapla imza 7 gün geçerli. Aşağıdaki komut, saatte bir çalışan bir launchd görevi kurar:
 
 ```bash
 ./scripts/auto-install.sh --enable
@@ -372,8 +372,8 @@ Kendi kopyanız için `PRODUCT_BUNDLE_IDENTIFIER` değerini değiştirin. Xcode'
 
 Görev her çalıştığında:
 - iPhone'daki yeni yedekleri iCloud Drive'a çeker,
-- imzanın bitmesine 48 saatten az kaldıysa uygulamayı kablosuz ya da kabloyla yeniden yükler,
-- sonucu Mac bildirimiyle haber verir.
+- imzanın bitmesine 72 saatten az kaldıysa uygulamayı kablosuz ya da kabloyla yeniden yükler (uykudaki iPhone Wi-Fi'den çoğu zaman yanıt vermez; saatlik deneme bu yüzden),
+- sonucu, sebebini söyleyen bir Mac bildirimiyle haber verir: Xcode'daki Apple hesabı çıkış yapmış, iPhone'a ulaşılamıyor ya da derleme hatası. Xcode'da hesap yoksa imza dolmadan günler önce uyarır, çünkü yeni ücretsiz imza o hesapla alınır. Aynı uyarı birkaç saatte bir tekrarlanır.
 
 Yükleme her seferinde uygulama ve widget için yeni 7 günlük profiller alır; veriler silinmez. Ücretsiz hesap App Group'a izin vermediği için uygulama ile widget fiyatları ortak bir Anahtar Zinciri grubunda paylaşır (`*.entitlements`). Telefonun Mac ile aynı ağda olması yeterli. Kayıt `~/Library/Logs/BirikimDefteri/auto-install.log` dosyasında; kaldırmak için `--disable`.
 
