@@ -980,3 +980,89 @@ struct RealizableValueTests {
         #expect(calculator.valueHistory(since: Fixture.day(20), now: Fixture.day(25)).last?.value == 3190)
     }
 }
+
+@MainActor
+@Suite("Bulut eşitleme")
+struct CloudSyncTests {
+    private func makeContainer() throws -> ModelContainer {
+        let container = try ModelContainer(
+            for: Person.self, Location.self, Asset.self, PricePoint.self, TransactionRecord.self, Debt.self,
+            DebtPayment.self, Goal.self, JournalEntry.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        Store.seedIfNeeded(in: container.mainContext)
+        return container
+    }
+
+    @Test("Değişen, eklenen ve silinen kayıtlar gönderilir; değişmeyenler gönderilmez")
+    func plansPushes() {
+        let a = SyncRecord(id: "person_A", type: .person, data: #"{"name":"Ben"}"#)
+        let b = SyncRecord(id: "person_B", type: .person, data: #"{"name":"Ayşe"}"#)
+        var state = SyncState(uid: "u")
+        state.records["person_A"] = .init(hash: a.hash, updatedAt: 1)
+        state.records["person_C"] = .init(hash: "eski", updatedAt: 1)
+        state.records["person_D"] = .init(hash: nil, updatedAt: 1)
+        let pushes = SyncPlanner.pushes(local: ["person_A": a, "person_B": b], state: state)
+        #expect(pushes == [
+            SyncPlanner.Push(id: "person_B", type: .person, data: b.data),
+            SyncPlanner.Push(id: "person_C", type: .person, data: nil),
+        ])
+    }
+
+    @Test("Yalnızca bilinen hâlden yeni uzak belgeler uygulanır; toplu silme yakalanır")
+    func filtersIncoming() {
+        var state = SyncState(uid: "u")
+        state.records["person_A"] = .init(hash: "x", updatedAt: 100)
+        let remote = [
+            RemoteItem(id: "person_A", type: .person, data: "", updatedAt: 100, deleted: false),
+            RemoteItem(id: "person_B", type: .person, data: "", updatedAt: 5, deleted: false),
+            RemoteItem(id: "garip_C", type: nil, data: "", updatedAt: 500, deleted: false),
+        ]
+        #expect(SyncPlanner.incoming(remote, state: state).map(\.id) == ["person_B"])
+        #expect(SyncPlanner.isMassDeletion(deletions: 21, total: 40))
+        #expect(!SyncPlanner.isMassDeletion(deletions: 21, total: 42))
+        #expect(!SyncPlanner.isMassDeletion(deletions: 5, total: 6))
+        #expect(SyncPlanner.type(of: "transaction_ABC") == .transaction)
+    }
+
+    @Test("Gidip gelen kayıt aynı kalır; uzak ekleme, düzenleme ve silme kimliğe göre uygulanır")
+    func appliesRemoteChanges() throws {
+        let sourceContainer = try makeContainer()
+        let source = sourceContainer.mainContext
+        let me = try #require(try source.fetch(FetchDescriptor<Person>()).first)
+        let gram = try #require(try source.fetch(FetchDescriptor<Asset>()).first { $0.name == "Gram altın" })
+        let home = try #require(try source.fetch(FetchDescriptor<Location>()).first)
+        let info = TransactionInfo(id: UUID(), kind: .buy, personID: me.id, assetID: gram.id, locationID: home.id,
+                                   quantity: d("3.4393179"), unitPrice: d("7269"), date: .now, createdAt: .now)
+        source.insert(TransactionRecord(info: info, note: "Not; \"tırnak\""))
+        try source.save()
+        let records = SyncSnapshot.make(from: source)
+
+        let targetContainer = try makeContainer()
+        let target = targetContainer.mainContext
+        let items = records.values.map { RemoteItem(id: $0.id, type: $0.type, data: $0.data, updatedAt: 1, deleted: false) }
+        try SyncApplier.apply(items, in: target)
+        let mirrored = SyncSnapshot.make(from: target)
+        let id = SyncRecord.id(.transaction, info.id)
+        #expect(mirrored[id] == records[id])
+        #expect(mirrored[SyncRecord.id(.person, me.id)] == records[SyncRecord.id(.person, me.id)])
+
+        var edited = try #require(SyncCoding.decode(BackupFile.TransactionEntry.self, from: records[id]!.data))
+        edited.quantity = "5"
+        try SyncApplier.apply([RemoteItem(id: id, type: .transaction, data: SyncCoding.encode(edited)!, updatedAt: 2, deleted: false)], in: target)
+        #expect(Ledger.fetch(from: target).transaction(info.id)?.quantity == 5)
+
+        try SyncApplier.apply([RemoteItem(id: id, type: .transaction, data: "", updatedAt: 3, deleted: true)], in: target)
+        #expect(Ledger.fetch(from: target).transaction(info.id) == nil)
+    }
+
+    @Test("Web'in yazdığı tarih ve sayı biçimleri okunur")
+    func decodesWebFormat() {
+        let json = #"{"id":"7F1C2B4A-1111-2222-3333-444455556666","kind":"sell","personID":"7F1C2B4A-1111-2222-3333-444455556667","assetID":"00000000-0000-0000-0000-000000000001","locationID":"7F1C2B4A-1111-2222-3333-444455556668","quantity":"1234.5","unitPrice":"1","date":"2026-11-12T21:00:00.000Z","note":"","createdAt":"2026-11-13T06:10:21.123Z"}"#
+        let entry = SyncCoding.decode(BackupFile.TransactionEntry.self, from: json)
+        #expect(entry?.kind == .sell)
+        #expect(entry?.quantity == "1234.5")
+        #expect(entry?.transferID == nil)
+        #expect(entry.map { ($0.createdAt.timeIntervalSince1970 * 1000).rounded() } == 1_794_550_221_123)
+    }
+}

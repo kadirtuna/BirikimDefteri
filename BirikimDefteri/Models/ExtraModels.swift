@@ -69,8 +69,11 @@ final class JournalEntry {
     var afterJSON: String?
     var isUndone: Bool = false
 
-    init(action: JournalAction, entity: JournalEntity, summary: String, before: String?, after: String?, date: Date = .now) {
-        self.id = UUID()
+    init(
+        id: UUID = UUID(), action: JournalAction, entity: JournalEntity, summary: String, before: String?, after: String?,
+        date: Date = .now
+    ) {
+        self.id = id
         self.date = date
         self.actionRaw = action.rawValue
         self.entityRaw = entity.rawValue

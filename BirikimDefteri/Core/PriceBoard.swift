@@ -127,6 +127,12 @@ enum SharedStore {
         }
     }
 
+    static func delete(key: String) {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecAttrAccount as String: key]
+        SecItemDelete(query as CFDictionary)
+    }
+
     static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                     kSecAttrAccount as String: key, kSecReturnData as String: true,

@@ -47,6 +47,8 @@ struct SettingsView: View {
                     }
                 }
 
+                CloudSection()
+
                 Section("Tanımlar") {
                     NavigationLink {
                         PeopleView()

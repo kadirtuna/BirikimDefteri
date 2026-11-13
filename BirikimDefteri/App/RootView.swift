@@ -42,6 +42,7 @@ struct RootView: View {
     @State private var router = AppRouter()
     @State private var lock = AppLock()
     @State private var priceUpdater = PriceUpdater()
+    @State private var cloud = CloudSync()
     @AppStorage(PriceUpdater.autoUpdateKey) private var autoUpdatePrices = true
     @AppStorage(AmountPrivacy.key) private var hidesAmounts = false
     @Environment(\.scenePhase) private var scenePhase
@@ -86,6 +87,20 @@ struct RootView: View {
         .environment(router)
         .environment(lock)
         .environment(priceUpdater)
+        .environment(cloud)
+        // Her kayıtta (ve buluttan gelen değişiklik uygulandığında) eşitleme kısa bir gecikmeyle çalışır;
+        // fark yoksa bulutla yalnızca değişiklik sorgusu yapılır.
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            cloud.scheduleSync(context: context)
+        }
+        // Açıkken dakikada bir: web'de yapılan değişiklikler telefona gelsin.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await cloud.sync(context: context)
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
         // Siri'nin "… ile Gram altın ekle" cümlelerindeki ürün adları güncel kalsın.
         .onChange(of: assets.map(\.name), initial: true) {
             BirikimShortcuts.updateAppShortcutParameters()
