@@ -49,7 +49,7 @@
 
 ## English
 
-**Birikim Defteri** ("savings ledger") is a personal iPhone app for tracking gold, silver, foreign currency, funds and Turkish lira savings: who owns what, where it is held and what it cost. Everything stays on the device. There is no server, no account and no analytics. The app only goes online to fetch public market prices. The interface is in Turkish and uses `tr_TR` number formats (₺1.234,50).
+**Birikim Defteri** ("savings ledger") is a personal iPhone app for tracking gold, silver, foreign currency, funds and Turkish lira savings: who owns what, where it is held and what it cost. Data lives on the device. The app only goes online to fetch public market prices and, once you sign in with Google, to sync with the owner's own free Firebase database, which also powers a web version. No analytics, no ads. The interface is in Turkish and uses `tr_TR` number formats (₺1.234,50).
 
 ### Highlights
 
@@ -77,6 +77,7 @@
 - **Backups and export:** JSON export and import. Automatic backups are pulled to iCloud Drive by the owner's Mac. Transactions, holdings and debts export as CSV files that open directly in Excel.
 - **Bank logos:** 54 Turkish banks and brokerages are recognized from location and debt names and shown with their logo. Logos are trademarks, so they are not in this repository: `scripts/fetch-logos.py` downloads them for your own build, from each institution's website or, when the site only has a tiny favicon, from its official App Store app. Without them, each institution shows a monogram in its brand color.
 - **In-app guide:** Settings > Kullanım kılavuzu explains every feature, where to find it and how it works, with search.
+- **Web version and sync:** sign in with Google under Settings > Bulut ve web and every record syncs with the owner's own Firestore database (free Spark plan). The web version on GitHub Pages does everything the phone does: buys, sells and transfers, debts and payments, price entry, the change history with undo, and Deleted. Only the owner's verified Google account can read or write the data.
 - **Native feel:** light and dark mode, dark and tinted app icons, Dynamic Type, haptic feedback, hand-drawn product icons (bars, coins, bracelets, currency badges).
 
 ### Tech stack
@@ -89,8 +90,10 @@
 | Domain logic | Pure Swift `PortfolioCalculator`, independent of SwiftUI and unit tested |
 | Security | LocalAuthentication (`deviceOwnerAuthentication`) |
 | System | WidgetKit (configurable widget), UserNotifications (local reminders), App Intents (Siri, Shortcuts), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
-| Networking | `URLSession`, public price sources only |
-| Tests | Swift Testing: 58 tests in 19 suites |
+| Networking | `URLSession`: public price sources and, when signed in, Google sign-in and Firestore |
+| Sync | Firestore REST API and Google sign-in (OAuth with PKCE in `ASWebAuthenticationSession`, Firebase Auth REST); no Firebase SDK on the phone |
+| Web | Plain JavaScript modules, Firebase JS SDK (Auth, Firestore with offline cache), GitHub Pages; no build step |
+| Tests | Swift Testing: 63 tests in 20 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -117,6 +120,8 @@ flowchart LR
     end
     AB -- "devicectl copy" --> AI --> IC[("iCloud Drive<br/>Birikim Defteri Yedekleri")]
     AI -- "reinstall when signing<br/>expires within 72 h" --> Device
+    SD <-->|"CloudSync<br/>(signed in)"| FS[("Firestore<br/>users/uid/items")]
+    FS <--> WEB["Web version<br/>GitHub Pages"]
 ```
 
 Views read a `Ledger` value, built from SwiftData queries, from the environment. All of the following lives in `PortfolioCalculator`, which knows nothing about SwiftUI:
@@ -134,18 +139,19 @@ Views read a `Ledger` value, built from SwiftData queries, from the environment.
 BirikimDefteri/
 ├── App/             App entry, root view, Face ID lock
 ├── Core/            Pure layer: types, PortfolioCalculator, tr_TR formatting, price parsing
-├── Models/          SwiftData models, Ledger, change journal, JSON backup, CSV export, reminders, price updater, auto backup, demo data
+├── Models/          SwiftData models, Ledger, change journal, JSON backup, CSV export, reminders, price updater, auto backup, cloud sync, demo data
 ├── Views/           Summary, Transactions, Debts, Prices, Settings, Analytics; icons and theme
 └── Assets.xcassets  App icon, logo, colors
 BirikimDefteriWidget/ Widget extension; shares Core/ and the local logo catalog with the app
 BirikimDefteriTests/ Swift Testing unit tests
 scripts/             install.sh (device install), auto-install.sh (scheduled re-signing and backups), fetch-logos.py (local bank logos), app-icon.swift (app icon)
-docs/                README images
+docs/                Web version (index.html, app/) served by GitHub Pages; README images
 ```
 
 ### Privacy
 
-- Data lives only in the on-device SwiftData store. No accounts, servers, analytics or ads.
+- Data lives in the on-device SwiftData store. Sync is optional: after you sign in with Google, records are also kept in the owner's own Firestore database, and its security rules let only the owner's verified Google account read or write them. No servers of our own, no analytics, no ads.
+- Sync talks only to Google: `accounts.google.com`, `oauth2.googleapis.com`, `identitytoolkit.googleapis.com`, `securetoken.googleapis.com` and `firestore.googleapis.com`. The web version also loads the Firebase SDK from `www.gstatic.com`.
 - Network requests go only to public price pages and carry no personal data: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`, `api.coingecko.com` (XAUT) and the bank/dealer comparison tables on `altin.doviz.com` and `kur.doviz.com`.
 - Automatic backups stay in the app's own container and are copied only by the owner's Mac to the owner's iCloud Drive.
 - The app never downloads logos. `fetch-logos.py` runs on the Mac and the logos are bundled at build time.
@@ -205,6 +211,31 @@ Each install fetches fresh 7-day profiles for the app and its widget and keeps t
     --domain-identifier com.kadirtuna.birikimdefteri --source ekle.json --destination Documents/BirikimDefteri-ekle.json
   ```
 
+### Web version and sync
+
+Each record is one Firestore document, `users/{uid}/items/{type}_{id}`, holding the record as backup-format JSON, an `updatedAt` time and a deletion marker; the last writer wins. The phone sends its changes, then reads what changed since its last read (by server time): two seconds after every save and every minute while the app is open. The web version listens live. Changes from either side are written to the change history, so undo and Deleted work on both. A sync that would delete more than half of the records (and more than 20) stops and asks first.
+
+The values in `docs/app/config.js` and `CloudConfig` (`Models/CloudAuth.swift`) point at the owner's Firebase project. They are public identifiers; the security rules protect the data. For your own copy:
+
+1. Create a Firebase project (the free Spark plan is enough). Under Authentication, enable Google and add `<you>.github.io` to the authorized domains.
+2. Create a Firestore database in production mode and publish these rules with your own address:
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{uid}/items/{item} {
+         allow read, write: if request.auth != null && request.auth.uid == uid
+           && request.auth.token.email == 'you@gmail.com'
+           && request.auth.token.email_verified == true;
+       }
+     }
+   }
+   ```
+
+3. Register a web app and copy its settings into `docs/app/config.js`. Register an iOS app with your bundle ID and put the project ID, the web API key and the iOS OAuth client ID (`CLIENT_ID` in `GoogleService-Info.plist`) into `CloudConfig`.
+4. Turn on GitHub Pages for the `main` branch, `/docs` folder.
+
 ### Development
 
 ```bash
@@ -232,7 +263,7 @@ Other Debug-only launch arguments: `-startTab prices` (or `records`, `debts`, `s
 
 ## Türkçe
 
-**Birikim Defteri**, altın, gümüş, döviz, fon ve TL birikimlerini; kimde, nerede ve ne maliyetle durduklarını takip eden kişisel bir iPhone uygulaması. Bütün veriler cihazda kalır: sunucu yok, hesap yok, analitik yok. İnternete yalnızca herkese açık güncel fiyatları almak için çıkılır.
+**Birikim Defteri**, altın, gümüş, döviz, fon ve TL birikimlerini; kimde, nerede ve ne maliyetle durduklarını takip eden kişisel bir iPhone uygulaması. Veriler cihazda durur. İnternete yalnızca herkese açık güncel fiyatları almak ve Google ile giriş yapıldıysa sahibinin kendi ücretsiz Firebase veritabanıyla eşitlemek için çıkılır; bu veritabanı bir web sürümünü de besler. Analitik ve reklam yok.
 
 ### Öne çıkanlar
 
@@ -260,6 +291,7 @@ Other Debug-only launch arguments: `-startTab prices` (or `records`, `debts`, `s
 - **Yedek ve dışa aktarma:** JSON dışa ve içe aktarma. Otomatik yedekler kullanıcının Mac'i tarafından iCloud Drive'a çekilir. İşlemler, varlıklar ve borçlar Excel'de doğrudan açılan CSV olarak dışa aktarılır.
 - **Banka logoları:** Türkiye'deki 54 banka ve aracı kurum, saklama yeri ve borç adlarından tanınıp logosuyla gösterilir. Logolar tescilli marka olduğu için bu depoda yer almaz; `scripts/fetch-logos.py` onları kendi derlemeniz için kurumun sitesinden, sitede yalnızca küçük bir favicon varsa resmi App Store uygulamasından indirir. Logo yoksa kurum, marka renginde baş harf rozetiyle görünür.
 - **Kullanım kılavuzu:** Ayarlar > Kullanım kılavuzu; her özelliğin ne işe yaradığı, nerede olduğu ve nasıl kullanıldığı, aramalı.
+- **Web sürümü ve eşitleme:** Ayarlar > Bulut ve web'den Google ile giriş yapınca bütün kayıtlar sahibinin kendi Firestore veritabanıyla (ücretsiz Spark planı) eşitlenir. GitHub Pages'teki web sürümünde telefondaki her şey yapılır: alış, satış ve aktarım, borç ve ödeme, fiyat girme, geri alınabilen işlem geçmişi ve Silinenler. Verileri yalnızca sahibinin doğrulanmış Google hesabı okuyup yazabilir.
 - **Yerel his:** açık ve koyu mod, koyu ve renklendirilmiş uygulama simgesi, Dynamic Type, dokunsal geri bildirim; çizilmiş ürün simgeleri (külçe, sikke, bilezik, döviz rozetleri).
 
 ### Teknoloji
@@ -272,8 +304,10 @@ Other Debug-only launch arguments: `-startTab prices` (or `records`, `debts`, `s
 | Hesaplama | Saf Swift `PortfolioCalculator`; SwiftUI'dan bağımsız, birim testli |
 | Güvenlik | LocalAuthentication (`deviceOwnerAuthentication`) |
 | Sistem | WidgetKit (ayarlanabilir widget), UserNotifications (yerel hatırlatmalar), App Intents (Siri, Kısayollar), `ImageRenderer` → PDF, `fileExporter` (CSV/JSON) |
-| Ağ | `URLSession`; yalnızca herkese açık fiyat kaynakları |
-| Test | Swift Testing: 58 test, 19 grup |
+| Ağ | `URLSession`: herkese açık fiyat kaynakları; giriş yapıldıysa Google girişi ve Firestore |
+| Eşitleme | Firestore REST API ve Google girişi (`ASWebAuthenticationSession` içinde PKCE'li OAuth, Firebase Auth REST); telefonda Firebase SDK'sı yok |
+| Web | Düz JavaScript modülleri, Firebase JS SDK (Auth, çevrimdışı önbellekli Firestore), GitHub Pages; derleme adımı yok |
+| Test | Swift Testing: 63 test, 20 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -300,6 +334,8 @@ flowchart LR
     end
     AB -- "devicectl copy" --> AI --> IC[("iCloud Drive<br/>Birikim Defteri Yedekleri")]
     AI -- "imza 72 saat kala<br/>yeniden yükle" --> Cihaz
+    SD <-->|"CloudSync<br/>(giriş yapıldıysa)"| FS[("Firestore<br/>users/uid/items")]
+    FS <--> WEB["Web sürümü<br/>GitHub Pages"]
 ```
 
 Görünümler, SwiftData sorgularından kurulan `Ledger` değerini ortamdan (environment) okur. Aşağıdakilerin hepsi SwiftUI'ı hiç bilmeyen `PortfolioCalculator` içindedir:
@@ -317,18 +353,19 @@ Görünümler, SwiftData sorgularından kurulan `Ledger` değerini ortamdan (env
 BirikimDefteri/
 ├── App/             Uygulama girişi, kök görünüm, Face ID kilidi
 ├── Core/            Saf katman: tipler, PortfolioCalculator, biçimlendirme (tr_TR), fiyat ayrıştırma
-├── Models/          SwiftData modelleri, Ledger, değişiklik günlüğü, yedek (JSON), CSV dışa aktarma, hatırlatmalar, fiyat güncelleyici, otomatik yedek, örnek veri
+├── Models/          SwiftData modelleri, Ledger, değişiklik günlüğü, yedek (JSON), CSV dışa aktarma, hatırlatmalar, fiyat güncelleyici, otomatik yedek, bulut eşitleme, örnek veri
 ├── Views/           Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz; simgeler ve tema
 └── Assets.xcassets  Uygulama simgesi, logo, renkler
 BirikimDefteriWidget/ Widget eklentisi; Core/ klasörünü ve yerel logo kataloğunu uygulamayla paylaşır
 BirikimDefteriTests/ Swift Testing birim testleri
 scripts/             install.sh (cihaza yükleme), auto-install.sh (zamanlanmış yenileme ve yedek), fetch-logos.py (yerel banka logoları), app-icon.swift (uygulama simgesi)
-docs/                README görselleri
+docs/                GitHub Pages'ten yayımlanan web sürümü (index.html, app/); README görselleri
 ```
 
 ### Gizlilik
 
-- Veriler yalnızca cihazdaki SwiftData deposunda durur. Hesap, sunucu, analitik ya da reklam yok.
+- Veriler cihazdaki SwiftData deposunda durur. Eşitleme isteğe bağlıdır: Google ile giriş yapıldıktan sonra kayıtlar sahibinin kendi Firestore veritabanında da tutulur ve güvenlik kuralları gereği yalnızca sahibin doğrulanmış Google hesabı okuyup yazabilir. Kendimize ait sunucu, analitik ya da reklam yok.
+- Eşitleme yalnızca Google'a bağlanır: `accounts.google.com`, `oauth2.googleapis.com`, `identitytoolkit.googleapis.com`, `securetoken.googleapis.com` ve `firestore.googleapis.com`. Web sürümü ayrıca Firebase SDK'sını `www.gstatic.com`'dan yükler.
 - İnternete giden istekler yalnızca herkese açık fiyat sayfalarına gider ve kişisel veri içermez: `finans.truncgil.com/today.json`, `www.tcmb.gov.tr/kurlar/today.xml`, `api.coingecko.com` (XAUT) ve `altin.doviz.com` / `kur.doviz.com` banka ve kuyumcu tabloları.
 - Otomatik yedekler uygulamanın kendi klasöründe tutulur ve yalnızca kullanıcının kendi Mac'i tarafından kendi iCloud Drive'ına kopyalanır.
 - Uygulama logo indirmez. `fetch-logos.py` Mac'te çalışır, logolar derleme sırasında uygulamaya eklenir.
@@ -387,6 +424,31 @@ Yükleme her seferinde uygulama ve widget için yeni 7 günlük profiller alır;
   xcrun devicectl device copy to --device <UDID> --domain-type appDataContainer \
     --domain-identifier com.kadirtuna.birikimdefteri --source ekle.json --destination Documents/BirikimDefteri-ekle.json
   ```
+
+### Web sürümü ve eşitleme
+
+Her kayıt bir Firestore belgesidir: `users/{uid}/items/{tür}_{kimlik}`. Belgede kaydın yedek biçimindeki JSON'u, `updatedAt` zamanı ve silme işareti durur; son yazan kazanır. Telefon önce kendi değişikliklerini gönderir, sonra son okumasından bu yana değişenleri (sunucu saatine göre) okur: her kayıttan iki saniye sonra ve uygulama açıkken dakikada bir. Web sürümü değişiklikleri canlı dinler. İki taraftaki değişiklikler de işlem geçmişine yazılır; geri alma ve Silinenler ikisinde de çalışır. Kayıtların yarısından fazlasını (ve 20'den fazlasını) silecek bir eşitleme durur ve önce sorar.
+
+`docs/app/config.js` ve `CloudConfig` (`Models/CloudAuth.swift`) içindeki değerler sahibinin Firebase projesini gösterir. Bunlar herkese açık kimliklerdir; veriyi güvenlik kuralları korur. Kendi kopyanız için:
+
+1. Bir Firebase projesi açın (ücretsiz Spark planı yeterli). Authentication'da Google'ı etkinleştirin, yetkili alanlara `<siz>.github.io` ekleyin.
+2. Production modunda bir Firestore veritabanı oluşturup şu kuralları kendi adresinizle yayımlayın:
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{uid}/items/{item} {
+         allow read, write: if request.auth != null && request.auth.uid == uid
+           && request.auth.token.email == 'siz@gmail.com'
+           && request.auth.token.email_verified == true;
+       }
+     }
+   }
+   ```
+
+3. Bir web uygulaması kaydedip ayarlarını `docs/app/config.js` dosyasına yazın. Kendi paket kimliğinizle bir iOS uygulaması kaydedin; proje kimliğini, web API anahtarını ve iOS OAuth istemci kimliğini (`GoogleService-Info.plist` içindeki `CLIENT_ID`) `CloudConfig`'e yazın.
+4. GitHub Pages'i `main` dalı, `/docs` klasörü için açın.
 
 ### Geliştirme
 

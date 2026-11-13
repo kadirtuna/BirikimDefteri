@@ -19,8 +19,8 @@ Depo: `~/Developer/BirikimDefteri`, GitHub'da herkese açık: `kadirtuna/Birikim
 - Konuşma Türkçe. Kullanıcı önerileri seçilebilir liste (checklist) olarak görmeyi seviyor.
 - Apple hesap şifresini **asla** isteme ve hiçbir yere girme. Xcode'a hesap eklemek, iPhone'da "Güven" demek kullanıcının işi.
 - Bir şey kurman gerekirse (Homebrew paketi vb.) önce sor. Üçüncü taraf paket ekleme.
-- Veriler cihazda kalır. Ağa yalnızca herkese açık fiyat kaynakları için çıkılır; yeni bir adres eklemek gizlilik
-  kararıdır: kullanıcıya söyle, README'deki gizlilik bölümünü güncelle.
+- Veriler cihazda kalır. Ağa yalnızca herkese açık fiyat kaynakları ve (giriş yapıldıysa) Google girişi ile Firestore için
+  çıkılır; yeni bir adres eklemek gizlilik kararıdır: kullanıcıya söyle, README'deki gizlilik bölümünü güncelle.
 - **Değerleme ilkesi:** gösterilen değer, bozdurulunca ele geçecek tutardan asla fazla olmamalı. Her bakiye durduğu
   yerin alış fiyatıyla değerlenir (aşağıya bak). Yeni bir değerleme kaynağı eklerken bu ilkeyi koru.
 - Simülatör olarak iPhone 14 kullan (silinmişse `xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 <runtime>`).
@@ -67,7 +67,7 @@ Debug derlemede açılış argümanları: `-demoData` (örnek veri, verinin yeri
 - `Models/`: SwiftData modelleri (Person, Location, Asset, PricePoint, TransactionRecord, Debt, DebtPayment, Goal,
   JournalEntry), `Ledger` (sorgulardan kurulan anlık görüntü, ortamda `\.ledger`), `Journal` (değişiklik geçmişi ve geri al),
   `Backup` (JSON yedek, geri yükleme, birleştirme), `AutoBackup`, `PriceUpdater`, `PaymentReminders`, `Exporters` (CSV),
-  `DemoData` (yalnızca Debug).
+  `CloudSync` (Firestore eşitleme), `CloudAuth` (Google girişi, `CloudConfig`), `DemoData` (yalnızca Debug).
 - `Views/`: Özet, Kayıtlar, Borçlar, Fiyatlar, Ayarlar, Analiz ekranları.
 - `App/`: giriş noktası (`AppContainer.shared`), `RootView`, `AppLock` (zorunlu Face ID / cihaz şifresi), `Intents`
   (Siri ve Kısayollar: "Birikim Defteri ile alım ekle"), `WidgetPreview` (Debug).
@@ -75,6 +75,9 @@ Debug derlemede açılış argümanları: `-demoData` (örnek veri, verinin yeri
   (`project.pbxproj` içindeki file-system-synchronized exception set'ler).
 - `scripts/`: `install.sh`, `auto-install.sh`, `lib.sh` (ortak; Xcode hesap kontrolü, çıkış kodları 3/4),
   `fetch-logos.py` + `normalize-logo.swift`, `app-icon.swift` (simge ve koyu/renkli sürümleri).
+- `docs/`: GitHub Pages'teki web sürümü (derleme adımı yok): `index.html`, `app/format.js` (tr_TR), `app/calc.js`
+  (`PortfolioCalculator`'ın JS karşılığı), `app/store.js` (Firebase JS SDK, canlı dinleme), `app/actions.js` (yazımlar ve
+  telefondakiyle aynı biçimde işlem geçmişi), `app/main.js` (ekranlar), `app/config.js` (Firebase web ayarları).
 - Xcode projesi elle yazılmıştır (objectVersion 77, PBXFileSystemSynchronizedRootGroup); yeni dosya klasöre konunca
   derlemeye girer. Hedef eklemek için `project.pbxproj` elle düzenlenir.
 
@@ -88,6 +91,15 @@ Debug derlemede açılış argümanları: `-demoData` (örnek veri, verinin yeri
   0,995 (%0,20 komisyon + %0,30 fark payı), tanınmayan bankada bütün bankaların en düşüğü. Kurum fiyatı alınamazsa
   genel fiyata olan son fark korunur.
 - Silmeler ve yedekten geri yüklemeler işlem geçmişinden hiç budanmaz (Silinenler); ekleme/düzenleme son 500.
+- Eşitleme: her kayıt `users/{uid}/items/{tür}_{UUID}` belgesi; alanlar `type`, `data` (yedek biçimindeki JSON metni,
+  ISO-8601 milisaniyeli tarih, sayılar metin), `updatedAt` (ms), `deleted`, `serverTime`. Son yazan kazanır. Telefon
+  Firebase SDK'sı kullanmaz (REST + PKCE'li Google OAuth). Telefon önce gönderir sonra çeker (ilk eşitlemede önce çeker);
+  durum dosyası `Application Support/cloud-sync-state.json`. Toplu silme koruması: >20 ve >%50.
+  İşlem geçmişinin `before`/`after` JSON'u Swift'in varsayılan `JSONEncoder`'ıyla yazılır (tarih = 2001'den beri saniye);
+  web `toRef`/`fromRef` ile çevirir. **Hesaplama ya da kayıt biçimi değişirse `docs/app/calc.js` ve `actions.js` de
+  güncellenmeli**; Swift ile JS aynı sonucu vermeli (gerçek bir yedekle karşılaştırarak doğrula).
+  Firestore güvenlik kuralları sahibinin e-postasını içerdiği için depoda değil; konsoldan yönetilir.
+  `-demoData` ile açılan Debug derlemede eşitleme kapalıdır.
 - Ücretsiz hesap kısıtları: imza 7 gün; App Group yok, bu yüzden uygulama ile widget ortak **Anahtar Zinciri grubu**
   (`*.entitlements`, `SharedStore`) kullanır; widget'ın ayrı App ID'si ve profili var (`.widget`).
   Xcode'da Apple hesabı çıkış yaparsa imza yenilenemez (`install.sh` 3 ile çıkar). İmza bir kez dolarsa iPhone

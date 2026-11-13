@@ -6,10 +6,10 @@ import UIKit
 /// Firebase projesinin herkese açık ayarları. Bunlar gizli değildir; verileri Firestore kuralları korur
 /// (yalnızca sahibinin Google hesabı okuyup yazabilir).
 enum CloudConfig {
-    static let projectID = ""
-    static let apiKey = ""
+    static let projectID = "birikim-defteri-bd24b"
+    static let apiKey = "AIzaSyCTSDC4uoNd53lIFaCqejExFU3RUwdFvA8"
     /// Firebase'in oluşturduğu iOS OAuth istemcisi (GoogleService-Info.plist'teki CLIENT_ID).
-    static let iosClientID = ""
+    static let iosClientID = "124341557055-l62ir4ddum687d9mfmbi74s5j6fq0h17.apps.googleusercontent.com"
     static let webURL = URL(string: "https://kadirtuna.github.io/BirikimDefteri/")!
 
     static var isConfigured: Bool { !projectID.isEmpty && !apiKey.isEmpty && !iosClientID.isEmpty }

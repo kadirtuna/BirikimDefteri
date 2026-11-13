@@ -1056,6 +1056,19 @@ struct CloudSyncTests {
         #expect(Ledger.fetch(from: target).transaction(info.id) == nil)
     }
 
+    @Test("Tarih yazılıp okununca aynı metni verir (milisaniye kaymaz)")
+    func dateRoundTripIsStable() {
+        struct Box: Codable { var date: Date }
+        #expect(SyncCoding.isoString(Date(timeIntervalSince1970: 1_794_550_221.123)) == "2026-11-13T06:10:21.123Z")
+        #expect(SyncCoding.isoString(Date(timeIntervalSince1970: 1_794_550_221.9996)) == "2026-11-13T06:10:22.000Z")
+        for _ in 0..<2000 {
+            let date = Date(timeIntervalSince1970: .random(in: 1_500_000_000...2_000_000_000))
+            let first = SyncCoding.encode(Box(date: date))!
+            let again = SyncCoding.decode(Box.self, from: first).flatMap { SyncCoding.encode($0) }
+            #expect(again == first)
+        }
+    }
+
     @Test("Web'in yazdığı tarih ve sayı biçimleri okunur")
     func decodesWebFormat() {
         let json = #"{"id":"7F1C2B4A-1111-2222-3333-444455556666","kind":"sell","personID":"7F1C2B4A-1111-2222-3333-444455556667","assetID":"00000000-0000-0000-0000-000000000001","locationID":"7F1C2B4A-1111-2222-3333-444455556668","quantity":"1234.5","unitPrice":"1","date":"2026-11-12T21:00:00.000Z","note":"","createdAt":"2026-11-13T06:10:21.123Z"}"#

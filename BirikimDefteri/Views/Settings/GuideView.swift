@@ -332,6 +332,21 @@ enum GuideContent {
                     .init(title: "İmza yenileme", text: "Ücretsiz Apple hesabıyla uygulamanın imzası 7 gün geçerlidir. Mac'teki görev, iPhone aynı ağdayken imzayı süresi dolmadan yeniler; verileriniz silinmez."),
                 ]
             ),
+            GuideTopic(
+                title: "Bulut ve web",
+                symbol: "icloud.and.arrow.up.fill",
+                tint: .blue,
+                summary: "Telefonla eşitlenen web sürümü; yalnızca sizin Google hesabınız girebilir.",
+                location: "Ayarlar > Bulut ve web",
+                items: [
+                    .init(title: "Açma", text: "Google ile giriş yap'a dokunup kendi hesabınızı seçin. İlk eşitlemede telefondaki bütün kayıtlar buluta yüklenir. Sonra uygulama açıkken dakikada bir ve her kayıttan iki saniye sonra kendiliğinden eşitler; Şimdi eşitle ile beklemeden eşitleyebilirsiniz."),
+                    .init(title: "Web sürümü", text: "Web sürümünü aç bağlantısı tarayıcıda açılır; aynı Google hesabıyla girin. Web'de telefondaki her şey yapılır: alış, satış ve aktarım, borç ve ödeme, fiyat girme, işlem geçmişi, geri alma ve Silinenler. Web'deki değişiklik birkaç saniye içinde telefona gelir."),
+                    .init(title: "Kimler görebilir", text: "Veriler, sahibinin ücretsiz Firebase projesindeki veritabanında durur. Güvenlik kuralları gereği yalnızca sahibin doğrulanmış Google hesabı okuyup yazabilir; başka bir hesapla giriş yapan hiçbir şey göremez."),
+                    .init(title: "Çakışma", text: "Aynı kayıt iki yerde değiştirilirse son değişiklik geçerli olur. Bütün değişiklikler işlem geçmişine yazıldığı için istenmeyen hâl Geri al ile düzeltilebilir."),
+                    .init(title: "Toplu silme koruması", text: "Bir eşitleme kayıtların yarısından fazlasını (ve 20'den fazlasını) silecekse durur ve uyarır. Bilerek yaptıysanız Yine de eşitle'ye dokunun."),
+                    .init(title: "Çıkış", text: "Çıkış yap eşitlemeyi durdurur; telefondaki ve buluttaki veriler silinmez."),
+                ]
+            ),
         ]),
     ]
 }

@@ -93,9 +93,18 @@ enum SyncCoding {
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
-            try container.encode(date.formatted(dateStyle))
+            try container.encode(isoString(date))
         }
         return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    /// Milisaniyeye yuvarlanmış ISO-8601 ("2026-11-13T06:10:21.123Z"). Kesir tam sayı milisaniyeden yazılır:
+    /// biçimlendirici kayan noktalı değeri kırptığı için okunup yeniden yazılan tarih 1 ms kayabiliyordu.
+    static func isoString(_ date: Date) -> String {
+        let ms = Int64((date.timeIntervalSince1970 * 1000).rounded())
+        let seconds = Int64((Double(ms) / 1000).rounded(.down))
+        let whole = Date(timeIntervalSince1970: TimeInterval(seconds)).formatted(.iso8601)
+        return "\(whole.dropLast())." + String(format: "%03dZ", Int(ms - seconds * 1000))
     }
 
     static func decode<T: Decodable>(_ type: T.Type, from text: String) -> T? {
