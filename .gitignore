@@ -8,3 +8,7 @@ xcuserdata/
 # Kurum logoları tescilli markadır; scripts/fetch-logos.py ile yerelde indirilir.
 BirikimDefteri/InstitutionLogos.xcassets/
 __pycache__/
+
+# Claude için kişisel bağlam: yalnızca bu Mac'te kalır.
+.claude/*.local.md
+.claude/settings.local.json
