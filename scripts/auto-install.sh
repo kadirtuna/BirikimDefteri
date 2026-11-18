@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # launchd saatte bir çalıştırır; Mac uykudaysa uyanınca çalışır.
 # 1. Uygulamanın iPhone'da yazdığı JSON yedeklerini iCloud Drive > Birikim Defteri Yedekleri'ne çeker.
-# 2. İmzanın bitmesine 72 saatten az kaldıysa uygulamayı iPhone'a yeniden yükler (başlatmaz).
-#    iPhone uykudayken Wi-Fi'den yanıt vermeyebilir; saatlik deneme bu yüzden.
+# 2. İmzanın bitmesine 5 günden az kaldıysa uygulamayı iPhone'a yeniden yükler (başlatmaz). Derleme telefona
+#    bakmaz, yükleme kilitli telefona da yapılır. 2 günden fazla süre varken yalnızca telefon kilitliyken yükler
+#    (yükleme açık uygulamayı kapatır). iPhone uykudayken Wi-Fi'den yanıt vermeyebilir; saatlik deneme bu yüzden.
 # 3. Xcode'daki Apple hesabı çıkış yapmışsa imza dolmadan önce uyarır.
-# Bildirimler sebebe göre değişir ve aynı uyarı birkaç saatte bir tekrarlanır.
+# Her şey yolundaysa hiçbir bildirim göstermez. Sorun varsa sebebi söyler, aynı uyarıyı birkaç saatte bir
+# tekrarlar; sorun sonradan kendiliğinden çözülürse bunu da bir kez haber verir.
 # iPhone kabloyla bağlı ya da Mac ile aynı ağda olmalı.
 #
 #   ./scripts/auto-install.sh             Şimdi kontrol et, gerekirse yükle
@@ -23,7 +25,8 @@ AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs/BirikimDefteri"
 LOG="$LOG_DIR/auto-install.log"
 STATE="build/installed-profile-expiry"
-RENEW_BEFORE_HOURS=72
+RENEW_BEFORE_HOURS=120     # 5 gün: Mac'in açık, iPhone'un aynı Wi-Fi'de olduğu bir saate denk gelme şansı yüksek
+QUIET_INSTALL_HOURS=48     # bundan fazla süre varken yalnızca iPhone kilitliyken (kullanılmıyorken) yükle
 NOTIFY_STATE="build/notified"
 BUNDLE_ID="com.kadirtuna.birikimdefteri"
 ICLOUD="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
@@ -169,12 +172,21 @@ if [[ "${1:-}" != "--force" && -n "$hours_left" ]] && (( hours_left > RENEW_BEFO
     exit 0
 fi
 
-SKIP_LAUNCH=1 ./scripts/install.sh
+only_when_locked=1
+[[ "${1:-}" == "--force" || -z "$hours_left" ]] && only_when_locked=0
+[[ -n "$hours_left" ]] && (( hours_left <= QUIET_INSTALL_HOURS )) && only_when_locked=0
+ONLY_WHEN_LOCKED="$only_when_locked" SKIP_LAUNCH=1 ./scripts/install.sh
 status=$?
 if (( status == 0 )); then
-    rm -f "$NOTIFY_STATE/account" "$NOTIFY_STATE/unreachable" "$NOTIFY_STATE/build"
     new_epoch="$(to_epoch "$(cat "$STATE" 2>/dev/null)")"
-    notify "İmza yenilendi. Yeni geçerlilik: $(to_local "${new_epoch:-$(date +%s)}")"
+    echo "İmza yenilendi; yeni geçerlilik: $(to_local "${new_epoch:-$(date +%s)}")"
+    # Sessiz çalışır; yalnızca daha önce bir sorun bildirildiyse çözüldüğünü haber verir.
+    warned=0
+    for key in account unreachable build; do [[ -f "$NOTIFY_STATE/$key" ]] && warned=1; done
+    if (( warned )); then
+        notify "İmza yenilendi, sorun çözüldü. Yeni geçerlilik: $(to_local "${new_epoch:-$(date +%s)}")"
+    fi
+    rm -f "$NOTIFY_STATE/account" "$NOTIFY_STATE/unreachable" "$NOTIFY_STATE/build"
     echo "=== bitti (0)"
     exit 0
 fi
@@ -183,10 +195,18 @@ case "$status" in
 "$EXIT_NO_ACCOUNT")
     # Yukarıda zaten uyarıldı.
     ;;
-"$EXIT_UNREACHABLE")
-    # Telefon uykudayken sık olur; yalnızca süre azaldıysa ve 6 saatte bir uyar.
+"$EXIT_IN_USE")
+    echo "iPhone kullanımda; açık uygulamayı kapatmamak için bir sonraki denemeye bırakıldı."
+    ;;
+"$EXIT_UNREACHABLE" | "$EXIT_MAC_BUSY")
+    # Telefon uykudayken ya da Mac'in ekranı kilitliyken sık olur; yalnızca süre azaldıysa ve 6 saatte bir uyar.
     if [[ -z "$hours_left" ]] || (( hours_left < 24 )); then
-        notify_every unreachable 6 "İmza yenilenemedi: iPhone'a ulaşılamadı. $expiry_note iPhone'un kilidini açıp Mac ile aynı Wi-Fi'de bırakın ya da kabloyla bağlayın."
+        if (( status == EXIT_UNREACHABLE )); then
+            reason="iPhone'a ulaşılamadı. $expiry_note iPhone'u Mac ile aynı Wi-Fi'de bırakın (kilitli olabilir) ya da kabloyla bağlayın."
+        else
+            reason="Mac'in imza anahtarına erişilemedi. $expiry_note Mac'in kilidini açık bırakın."
+        fi
+        notify_every unreachable 6 "İmza yenilenemedi: $reason"
     fi
     ;;
 *)

@@ -329,7 +329,8 @@ enum GuideContent {
                     .init(title: "Otomatik yedek", text: "Veriler her değiştiğinde uygulama kendi klasörüne tarihli bir yedek yazar ve son 30'unu tutar. Mac'teki zamanlanmış görev bunları iCloud Drive > Birikim Defteri Yedekleri klasörüne kopyalar."),
                     .init(title: "Elle yedek", text: "Yedeği dışa aktar ile bir JSON dosyası kaydedin. Yedekten geri yükle mevcut bütün verilerin yerine geçer; önceki hâle İşlem geçmişi'nden dönebilirsiniz."),
                     .init(title: "Excel'e aktar", text: "İşlemler, varlıklar ve borçlar ayrı CSV dosyaları olarak kaydedilir ve Excel'de doğrudan açılır: noktalı virgülle ayrılmış, ondalıklar virgüllü."),
-                    .init(title: "İmza yenileme", text: "Ücretsiz Apple hesabıyla uygulamanın imzası 7 gün geçerlidir. Mac'teki görev, iPhone aynı ağdayken imzayı süresi dolmadan yeniler; verileriniz silinmez."),
+                    .init(title: "İmza yenileme", text: "Ücretsiz Apple hesabıyla uygulamanın imzası 7 gün geçerlidir. Mac'teki görev, son 5 günde Mac açıkken ve iPhone aynı Wi-Fi'deyken imzayı kendiliğinden yeniler; iPhone kilitli olabilir, verileriniz silinmez. Uygulama açıkken kapanmasın diye, süre yetiyorsa iPhone'un kilitli olmasını bekler."),
+                    .init(title: "İmza uyarısı", text: "Yenileme bir sebeple olamazsa uygulama imzanın dolmasına 24 saat kala bildirim gösterir, son 48 saatte de Özet'te uyarır. Mac'i açık, iPhone'u aynı Wi-Fi'de tutmanız yeterli; yenilenince uyarı kalkar. Süre dolsa bile veriler silinmez; Mac yeniledikten sonra iPhone'da bir kez Ayarlar > Genel > VPN ve Aygıt Yönetimi'nden Güven demeniz gerekir."),
                 ]
             ),
             GuideTopic(

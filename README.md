@@ -93,7 +93,7 @@
 | Networking | `URLSession`: public price sources and, when signed in, Google sign-in and Firestore |
 | Sync | Firestore REST API and Google sign-in (OAuth with PKCE in `ASWebAuthenticationSession`, Firebase Auth REST); no Firebase SDK on the phone |
 | Web | Plain JavaScript modules, Firebase JS SDK (Auth, Firestore with offline cache), GitHub Pages; no build step |
-| Tests | Swift Testing: 63 tests in 20 suites |
+| Tests | Swift Testing: 64 tests in 21 suites |
 | Tooling | Hand-written Xcode project (file-system synchronized groups), `xcodebuild`, `devicectl`, launchd |
 | Dependencies | None. No third-party packages. |
 
@@ -195,8 +195,10 @@ With a free account, the app's signature expires after 7 days. This installs a l
 
 Each run:
 - pulls new backups from the iPhone to iCloud Drive,
-- reinstalls the app over Wi-Fi or cable if the signature expires within 72 hours (an iPhone asleep on Wi-Fi often does not answer, hence the hourly retries),
-- reports the result with a Mac notification that names the cause: Xcode signed out of your Apple account, iPhone unreachable, or a build error. If Xcode is signed out it warns days before the signature runs out, because a new free signature needs that account. Each warning repeats at most every few hours.
+- reinstalls the app over Wi-Fi or cable once the signature has less than 5 days left, retrying every hour until it succeeds (the Mac must be awake; a MacBook asleep or an iPhone asleep on Wi-Fi misses that hour). The build does not wait for the iPhone (generic iOS destination) and the install also works while the iPhone is locked. With more than 2 days left it installs only while the iPhone is locked, so an open app is never closed,
+- stays silent when everything works. If something stands in the way it names the cause in a Mac notification: Xcode signed out of your Apple account, iPhone unreachable, or a build error. If Xcode is signed out it warns days before the signature runs out, because a new free signature needs that account. Each warning repeats at most every few hours, and a later success is reported once.
+
+As a last resort the app itself reads its signature's expiry from its own profile: if it has not been renewed, it shows a notification 24 hours before expiry and a warning on the summary screen for the last 48 hours.
 
 Each install fetches fresh 7-day profiles for the app and its widget and keeps the app's data. Free accounts cannot use App Groups, so the app and the widget share prices through a keychain access group (`*.entitlements`). The iPhone only needs to be on the same network as the Mac. The log is at `~/Library/Logs/BirikimDefteri/auto-install.log`; remove the job with `--disable`.
 
@@ -307,7 +309,7 @@ Other Debug-only launch arguments: `-startTab prices` (or `records`, `debts`, `s
 | Ağ | `URLSession`: herkese açık fiyat kaynakları; giriş yapıldıysa Google girişi ve Firestore |
 | Eşitleme | Firestore REST API ve Google girişi (`ASWebAuthenticationSession` içinde PKCE'li OAuth, Firebase Auth REST); telefonda Firebase SDK'sı yok |
 | Web | Düz JavaScript modülleri, Firebase JS SDK (Auth, çevrimdışı önbellekli Firestore), GitHub Pages; derleme adımı yok |
-| Test | Swift Testing: 63 test, 20 grup |
+| Test | Swift Testing: 64 test, 21 grup |
 | Araçlar | Elle yazılmış Xcode projesi (dosya sistemiyle eşitlenen gruplar), `xcodebuild`, `devicectl`, launchd |
 | Bağımlılık | Yok. Üçüncü taraf paket kullanılmıyor. |
 
@@ -409,8 +411,10 @@ Kendi kopyanız için `PRODUCT_BUNDLE_IDENTIFIER` değerini değiştirin. Xcode'
 
 Görev her çalıştığında:
 - iPhone'daki yeni yedekleri iCloud Drive'a çeker,
-- imzanın bitmesine 72 saatten az kaldıysa uygulamayı kablosuz ya da kabloyla yeniden yükler (uykudaki iPhone Wi-Fi'den çoğu zaman yanıt vermez; saatlik deneme bu yüzden),
-- sonucu, sebebini söyleyen bir Mac bildirimiyle haber verir: Xcode'daki Apple hesabı çıkış yapmış, iPhone'a ulaşılamıyor ya da derleme hatası. Xcode'da hesap yoksa imza dolmadan günler önce uyarır, çünkü yeni ücretsiz imza o hesapla alınır. Aynı uyarı birkaç saatte bir tekrarlanır.
+- imzanın bitmesine 5 günden az kaldığında uygulamayı kablosuz ya da kabloyla yeniden yükler; başarılı olana kadar saatte bir dener (Mac uyanık olmalı; uykudaki MacBook ya da Wi-Fi'de uyuyan iPhone o saati kaçırır). Derleme iPhone'u beklemez (genel iOS hedefi), yükleme iPhone kilitliyken de çalışır. 2 günden fazla süre varken yalnızca iPhone kilitliyken yükler; böylece açık uygulama hiç kapanmaz,
+- her şey yolundaysa sessiz kalır. Bir engel varsa sebebini Mac bildirimiyle söyler: Xcode'daki Apple hesabı çıkış yapmış, iPhone'a ulaşılamıyor ya da derleme hatası. Xcode'da hesap yoksa imza dolmadan günler önce uyarır, çünkü yeni ücretsiz imza o hesapla alınır. Aynı uyarı birkaç saatte bir tekrarlanır; sorun sonradan çözülürse bir kez haber verir.
+
+Son çare olarak uygulama, imzasının bitiş tarihini kendi profilinden okur: yenilenmediyse dolmasına 24 saat kala bildirim gösterir, son 48 saatte de Özet'te uyarır.
 
 Yükleme her seferinde uygulama ve widget için yeni 7 günlük profiller alır; veriler silinmez. Ücretsiz hesap App Group'a izin vermediği için uygulama ile widget fiyatları ortak bir Anahtar Zinciri grubunda paylaşır (`*.entitlements`). Telefonun Mac ile aynı ağda olması yeterli. Kayıt `~/Library/Logs/BirikimDefteri/auto-install.log` dosyasında; kaldırmak için `--disable`.
 

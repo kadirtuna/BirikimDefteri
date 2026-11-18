@@ -116,6 +116,7 @@ struct RootView: View {
             }
             if phase == .active {
                 Task { await PaymentReminders.reschedule(debts) }
+                Task { await SigningReminder.refresh() }
             }
         }
         .onChange(of: reminderSignature) {

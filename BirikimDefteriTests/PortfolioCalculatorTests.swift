@@ -1079,3 +1079,23 @@ struct CloudSyncTests {
         #expect(entry.map { ($0.createdAt.timeIntervalSince1970 * 1000).rounded() } == 1_794_550_221_123)
     }
 }
+
+@Suite("İmza süresi")
+struct SigningReminderTests {
+    @Test("Profilin bitiş tarihi, imzalı kabın içindeki plist'ten okunur")
+    func readsExpirationFromProvision() {
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict><key>Name</key><string>Test</string>
+        <key>ExpirationDate</key><date>2026-11-25T07:07:11Z</date></dict></plist>
+        """
+        // Gerçek profilde plist'in önünde ve arkasında ikili CMS verisi durur.
+        var data = Data([0x30, 0x82, 0x2F, 0x00, 0x06, 0x09])
+        data.append(Data(plist.utf8))
+        data.append(Data([0xA0, 0x82, 0x0D, 0x00]))
+        let expected = Date(timeIntervalSince1970: 1_795_590_431)
+        #expect(SigningReminder.expirationDate(fromProvision: data) == expected)
+        #expect(SigningReminder.expirationDate(fromProvision: Data([0x30, 0x82])) == nil)
+    }
+}

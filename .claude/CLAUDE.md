@@ -102,6 +102,12 @@ Debug derlemede açılış argümanları: `-demoData` (örnek veri, verinin yeri
   `-demoData` ile açılan Debug derlemede eşitleme kapalıdır.
 - Ücretsiz hesap kısıtları: imza 7 gün; App Group yok, bu yüzden uygulama ile widget ortak **Anahtar Zinciri grubu**
   (`*.entitlements`, `SharedStore`) kullanır; widget'ın ayrı App ID'si ve profili var (`.widget`).
+  İmza yenileme (`auto-install.sh`, saatte bir, Mac uyanıkken): son 5 günde dener; derleme genel iOS hedefiyle
+  (telefonu beklemez), yükleme kilitli iPhone'a da yapılır; 48 saatten fazla süre varken yalnızca iPhone kilitliyken
+  yükler (`ONLY_WHEN_LOCKED`, çıkış 5). Çıkış kodları: 3 hesap yok, 4 ulaşılamadı, 5 kullanımda, 6 imza anahtarına o an
+  erişilemedi (`errSecInternalComponent`, Mac ekranı kilitliyken). Yolundaysa bildirim göstermez. Uygulama kendi
+  profilinden bitiş tarihini okur (`SigningReminder`): 24 saat kala bildirim, son 48 saatte Özet'te uyarı.
+  Süresi dolmadan yeniden yükleme iPhone'daki "Güven" onayını sıfırlamaz; yalnızca süre dolunca sıfırlanır.
   Xcode'da Apple hesabı çıkış yaparsa imza yenilenemez (`install.sh` 3 ile çıkar). İmza bir kez dolarsa iPhone
   geliştiriciye güveni sıfırlar: Ayarlar > Genel > VPN ve Aygıt Yönetimi'nden yeniden "Güven" gerekir.
 

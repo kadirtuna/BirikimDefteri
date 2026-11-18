@@ -46,6 +46,12 @@ struct SummaryView: View {
                     .listRowBackground(HeroBackground())
                 }
 
+                if let expiry = SigningReminder.expiringSoon() {
+                    Section {
+                        SigningExpiryBanner(expiry: expiry)
+                    }
+                }
+
                 if !upcoming.isEmpty {
                     Section {
                         Button {
@@ -273,6 +279,29 @@ private struct Metric<Content: View>: View {
                 .fixedSize()
         }
     }
+}
+
+/// Mac imzayı bir sebeple yenileyemediyse son 48 saatte görünür; yenilenince kendiliğinden kalkar.
+private struct SigningExpiryBanner: View {
+    let expiry: Date
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Uygulamanın imzası \(expiry.formatted(Self.style)) doluyor")
+                    .foregroundStyle(.primary)
+                Text("Mac açıkken iPhone'u aynı Wi-Fi'de tutun; Mac yenileyince bu uyarı kalkar. Süre dolsa da veriler silinmez.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "clock.badge.exclamationmark.fill")
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private static let style = Date.FormatStyle(date: .omitted, time: .shortened, locale: Locale(identifier: "tr_TR"))
+        .weekday(.wide)
 }
 
 private struct MissingPriceBanner: View {
