@@ -116,6 +116,9 @@ if ! xcodebuild -project BirikimDefteri.xcodeproj -scheme "$SCHEME" -configurati
     build >"$LOG" 2>&1; then
     grep -E "error:" "$LOG" | sort -u | head -20 >&2 || true
     grep -q "No Accounts" "$LOG" && fail_with "$EXIT_NO_ACCOUNT" "$NO_ACCOUNT_HELP"
+    # Kilitli iPhone'da (özellikle Xcode güncellemesinden sonra) geliştirici hizmetleri açılmaz; bu derleme hatası değildir.
+    grep -q -E "needs to be unlocked|Timed out waiting for all destinations" "$LOG" \
+        && fail_with "$EXIT_UNREACHABLE" "$DEVICE_NAME kilitli ya da hazır değil. Kilidini açıp Mac ile aynı Wi-Fi'de tutun; bir sonraki denemede yenilenir."
     fail "Derleme başarısız. Ayrıntılar: $LOG"
 fi
 APP="$BUILD_DIR/Build/Products/$CONFIGURATION-iphoneos/BirikimDefteri.app"
